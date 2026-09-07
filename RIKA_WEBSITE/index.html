@@ -346,7 +346,7 @@
 
     <div class="app-container" id="appRoot">
 
-        <div class="app-title">🎙️ - <span>تعرف</span> الصوت الذكي</div>
+        <div class="app-title">🎙️ = <span>تعرف</span> الصوت الذكي</div>
 
         <div class="controls">
             <div class="switch-wrapper">
@@ -1096,4 +1096,34 @@
                     updateStatus('❌ فشل إعداد الميكروفون', true);
                     return;
                 }
-               
+                startMonitoring();
+                updateStatus('⏸️ اضغط "بدء الاستماع" لبدء التعرف', false);
+                setDotRed('idle');
+                updateSwitches();
+                updateSentenceCounter();
+                updateTextDisplay();
+                updateThresholdDisplay();
+                startBtnWrap.style.display = 'block';
+            })();
+
+            // ================================================================
+            // 16. CLEANUP
+            // ================================================================
+            window.addEventListener('beforeunload', function() {
+                if (recognizer) {
+                    try { recognizer.abort(); } catch (e) {}
+                }
+                stopMonitoring();
+                if (mediaStream) {
+                    mediaStream.getTracks().forEach(t => t.stop());
+                }
+                if (audioContext && audioContext.state !== 'closed') {
+                    audioContext.close();
+                }
+            });
+
+        })();
+    </script>
+
+</body>
+</html>
