@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>تعرف صوت - تحديثات متتالية</title>
+    <title>تعرف صوت - بسيط 1</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -129,8 +129,7 @@
 
         let isListening = false;
         let recognition = null;
-        let fullText = '';           // النص الكامل المتراكم (مثل: "مرحبا ١ ٢ ٣")
-        let lastFinalText = '';      // لمنع التكرار
+        let fullText = '';           // النص الكامل المتراكم
 
         // ----- التحقق من الدعم -----
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -164,17 +163,15 @@
                 let interimText = '';
                 let finalText = '';
 
+                // تجميع النتائج
                 for (let i = event.resultIndex; i < event.results.length; i++) {
                     const transcript = event.results[i][0].transcript.trim();
                     
                     if (event.results[i].isFinal) {
-                        // النص النهائي: نضيفه إلى النص الكامل
-                        if (transcript && transcript !== lastFinalText) {
-                            finalText = transcript;
-                            lastFinalText = transcript;
-                        }
+                        // النص النهائي
+                        finalText = transcript;
                     } else {
-                        // النص المؤقت: نعرضه فوراً
+                        // النص المؤقت
                         interimText = transcript;
                     }
                 }
@@ -221,7 +218,6 @@
 
                 // مسح النص السابق عند بدء تسجيل جديد
                 fullText = '';
-                lastFinalText = '';
                 textBox.textContent = '';
             };
 
