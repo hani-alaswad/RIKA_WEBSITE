@@ -295,6 +295,26 @@
             color: #f85149;
             font-size: 13px;
         }
+        .clap-msg {
+            color: #f0883e;
+            font-size: 16px;
+            font-weight: bold;
+            text-align: center;
+            padding: 8px;
+            background: #1a1a2e;
+            border-radius: 10px;
+            margin-top: 8px;
+            border: 1px solid #f0883e44;
+            display: none;
+        }
+        .clap-msg.show {
+            display: block;
+            animation: clapAnim 0.3s ease;
+        }
+        @keyframes clapAnim {
+            0% { transform: scale(0.8); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
 
         /* ====== RESPONSIVE ====== */
         @media (max-width: 500px) {
@@ -342,7 +362,7 @@
             </div>
         </div>
 
-        <!-- START BUTTON (يظهر فقط قبل البدء) -->
+        <!-- START BUTTON -->
         <div class="btn-center" id="startBtnWrap">
             <button class="action-btn" id="startBtn">▶️ بدء الاستماع</button>
         </div>
@@ -353,10 +373,13 @@
         <!-- SENTENCE COUNTER -->
         <div class="sentence-counter" id="sentenceCounter">الجمل المستلمة: 0</div>
 
-        <!-- VOLUME INDICATOR (بار عادي) -->
+        <!-- CLAP MESSAGE -->
+        <div class="clap-msg" id="clapMsg">👏 تم رصد تصفيق!</div>
+
+        <!-- VOLUME INDICATOR -->
         <div class="volume-section">
             <div class="volume-header">
-                <span>📊 مستوى الصوت</span>
+                <span>📊 مستوى الصوت (مضاعف ×2)</span>
                 <span class="volume-status-msg" id="volumeStatusMsg"></span>
             </div>
             <div class="volume-bar-bg">
@@ -386,13 +409,9 @@
     </div>
 
     <!-- ============================================================ -->
-    <!-- JAVASCRIPT — ALL LOGIC WRAPPED IN FUNCTIONS                  -->
+    <!-- JAVASCRIPT                                                   -->
     <!-- ============================================================ -->
     <script>
-        /* ===================================================================
-               MODULE : Smart Voice Recognition App
-               =================================================================== */
-
         (function() {
             'use strict';
 
@@ -414,13 +433,14 @@
             const continuousSwitchLabel = document.getElementById('continuousSwitchLabel');
             const startBtn = document.getElementById('startBtn');
             const startBtnWrap = document.getElementById('startBtnWrap');
+            const clapMsg = document.getElementById('clapMsg');
 
             // ================================================================
             // 2. STATE VARIABLES
             // ================================================================
             let isMainOn = true;
             let isContinuous = false;
-            let hasStarted = false; // هل ضغط المستخدم على "بدء الاستماع"؟
+            let hasStarted = false;
 
             let isListening = false;
             let isMonitoring = false;
@@ -439,17 +459,22 @@
             let silenceTimer = null;
             let sentenceFinalizeTimer = null;
             let greenBlinkTimer = null;
+            let clapTimer = null;
 
-            // معايير
-            const VOLUME_THRESHOLD = 3;
-            const SILENCE_DURATION_MS = 15000; // 15 ثانية
-            const SENTENCE_GAP_MS = 3000; // 3 ثواني
-            const MONITOR_INTERVAL_MS = 200;
+            // معايير محسنة
+            const VOLUME_THRESHOLD = 2; // بعد المضاعفة، 2 = 4 الأصلي
+            const SILENCE_DURATION_MS = 15000;
+            const SENTENCE_GAP_MS = 3000;
+            const MONITOR_INTERVAL_MS = 150;
             const MONITOR_INTERVAL_OFF_MS = 500;
             const SPEECH_FREQ_MIN = 200;
             const SPEECH_FREQ_MAX = 3000;
+            const CLAP_FREQ_MIN = 2000;
+            const CLAP_FREQ_MAX = 8000;
+            const CLAP_VOLUME_THRESHOLD = 5;
 
             let currentVolume = 0;
+            let rawVolume = 0; // قبل المضاعفة
 
             // ================================================================
             // 3. UI UPDATE FUNCTIONS
@@ -511,11 +536,29 @@
                 continuousSwitchLabel.textContent = isContinuous ? 'مفعل' : 'إيقاف';
             }
 
+            function showClap() {
+                clapMsg.classList.add('show');
+                if (clapTimer) clearTimeout(clapTimer);
+                clapTimer = setTimeout(() => {
+                    clapMsg.classList.remove('show');
+                }, 2000);
+            }
+
+            function clearTextBox() {
+                currentInterim = '';
+                currentSentence = '';
+                sentenceHistory = [];
+                sentenceCount = 0;
+                updateTextDisplay();
+                updateSentenceCounter();
+                setDotGreen('off');
+            }
+
             // ================================================================
-            // 4. VOLUME & FREQUENCY ANALYSIS
+            // 4. VOLUME & FREQUENCY ANALYSIS (مضاعفة الحساسية ×2)
             // ================================================================
             function getVolumeAndFreq() {
-                if (!analyser) return { volume: 0, isSpeech: false };
+                if (!analyser) return { volume: 0, isSpeech: false, isClap: false, rawVolume: 0 };
                 try {
                     const bufferLength = analyser.frequencyBinCount;
                     const data = new Uint8Array(bufferLength);
@@ -524,29 +567,46 @@
                     let sum = 0;
                     let speechSum = 0;
                     let speechCount = 0;
+                    let clapSum = 0;
+                    let clapCount = 0;
                     const nyquist = audioContext.sampleRate / 2;
 
                     for (let i = 0; i < bufferLength; i++) {
                         const freq = (i / bufferLength) * nyquist;
                         const val = data[i];
                         sum += val;
+
                         if (freq >= SPEECH_FREQ_MIN && freq <= SPEECH_FREQ_MAX) {
                             speechSum += val;
                             speechCount++;
+                        }
+                        if (freq >= CLAP_FREQ_MIN && freq <= CLAP_FREQ_MAX) {
+                            clapSum += val;
+                            clapCount++;
                         }
                     }
 
                     const avg = sum / bufferLength;
                     const speechAvg = speechCount > 0 ? speechSum / speechCount : 0;
+                    const clapAvg = clapCount > 0 ? clapSum / clapCount : 0;
 
-                    let level = Math.min(10, Math.floor((avg / 12) * 2.0));
+                    // مضاعفة الحساسية ×2
+                    let rawLevel = Math.min(10, Math.floor((avg / 12) * 2.0));
+                    rawLevel = Math.max(0, Math.min(10, rawLevel));
+                    let level = Math.min(10, rawLevel * 2); // ×2 مضاعفة
                     level = Math.max(0, Math.min(10, level));
 
-                    const isSpeech = (speechAvg > 8 && level > 1);
+                    const isSpeech = (speechAvg > 8 && level > VOLUME_THRESHOLD);
+                    const isClap = (clapAvg > 15 && level > CLAP_VOLUME_THRESHOLD);
 
-                    return { volume: level, isSpeech: isSpeech };
+                    return {
+                        volume: level,
+                        rawVolume: rawLevel,
+                        isSpeech: isSpeech,
+                        isClap: isClap
+                    };
                 } catch (e) {
-                    return { volume: 0, isSpeech: false };
+                    return { volume: 0, isSpeech: false, isClap: false, rawVolume: 0 };
                 }
             }
 
@@ -578,9 +638,16 @@
                 if (!analyser) return;
                 const result = getVolumeAndFreq();
                 currentVolume = result.volume;
+                rawVolume = result.rawVolume;
                 const isSpeechFreq = result.isSpeech;
+                const isClap = result.isClap;
 
                 updateVolumeDisplay(currentVolume);
+
+                // ---- كشف التصفيق ----
+                if (isClap && isMainOn && hasStarted) {
+                    showClap();
+                }
 
                 // ---- إذا لم يبدأ المستخدم بعد ----
                 if (!hasStarted) {
@@ -603,7 +670,7 @@
                     return;
                 }
 
-                // ---- الوضع الذكي ----
+                // ---- الوضع الذكي (مضاعفة الحساسية تجعل العتبة 2 = 4) ----
                 const isLoud = currentVolume > VOLUME_THRESHOLD;
 
                 if (isLoud && isSpeechFreq) {
@@ -613,9 +680,9 @@
                     }
                     resetSilenceTimer();
                 } else if (isLoud && !isSpeechFreq) {
-                    updateVolumeStatus('⚠️ تردد غير مناسب للكلام');
+                    updateVolumeStatus('⚠️ تردد غير مناسب للكلام (ضجيج)');
                     if (isListening) {
-                        // نستمر في الاستماع
+                        // نستمر في الاستماع ولا نوقف
                     }
                 } else {
                     updateVolumeStatus('');
@@ -624,8 +691,8 @@
                     }
                 }
 
-                // ---- إيقاف التعرف إذا كان الصمت 15 ثانية والمستوى < 2 ----
-                if (isListening && currentVolume < 2) {
+                // ---- إيقاف التعرف إذا كان الصمت 15 ثانية والمستوى < 1 ----
+                if (isListening && currentVolume < 1) {
                     // silenceTimer يعمل بالفعل
                 }
             }
@@ -640,13 +707,11 @@
                 }
                 silenceTimer = setTimeout(() => {
                     if (isListening && !isContinuous && isMainOn && hasStarted) {
-                        // نتحقق من أن المستوى لا يزال منخفضاً
-                        if (currentVolume < 2) {
+                        if (currentVolume < 1) {
                             stopRecognition();
                             updateStatus('⏸️ توقف تلقائي (صمت 15 ثانية)', false);
                             setDotRed('idle');
                         } else {
-                            // إذا ارتفع الصوت نعيد ضبط العداد
                             resetSilenceTimer();
                         }
                     }
@@ -835,7 +900,7 @@
                     });
 
                     analyser = audioContext.createAnalyser();
-                    analyser.fftSize = 1024;
+                    analyser.fftSize = 2048;
                     analyser.smoothingTimeConstant = 0.7;
                     analyser.minDecibels = -90;
                     analyser.maxDecibels = -10;
@@ -861,11 +926,9 @@
                 hasStarted = true;
                 startBtnWrap.style.display = 'none';
                 updateStatus('🔴 جاري الاستماع...', false);
-                // بدء التعرف إذا كان مستمراً أو الميزة مفعلة
                 if (isContinuous && isMainOn) {
                     startRecognition();
                 }
-                // بدء المراقبة الفعلية
                 if (monitorTimer) {
                     stopMonitoring();
                     startMonitoring();
@@ -873,7 +936,7 @@
             }
 
             // ================================================================
-            // 11. MAIN TOGGLE FUNCTIONS (للاستخدام الخارجي)
+            // 11. MAIN TOGGLE FUNCTIONS
             // ================================================================
             function toggleMainFeature() {
                 isMainOn = !isMainOn;
@@ -881,6 +944,7 @@
 
                 if (!isMainOn) {
                     if (isListening) stopRecognition();
+                    clearTextBox(); // مسح النص عند إيقاف الميزة
                     if (monitorTimer) {
                         stopMonitoring();
                         startMonitoring();
@@ -909,7 +973,8 @@
                     updateStatus('🔁 وضع التشغيل المستمر مفعل', false);
                 } else {
                     if (isListening) stopRecognition();
-                    updateStatus('⏸️ وضع التشغيل المستمر معطل', false);
+                    // عند إيقاف المستمر، ندخل في وضع الانتظار الذكي
+                    updateStatus('⏸️ وضع التشغيل المستمر معطل - انتظار كلام', false);
                     if (monitorTimer) {
                         stopMonitoring();
                         startMonitoring();
@@ -925,6 +990,7 @@
                     isMonitoring: isMonitoring,
                     hasStarted: hasStarted,
                     currentVolume: currentVolume,
+                    rawVolume: rawVolume,
                     currentSentence: currentSentence,
                     currentInterim: currentInterim,
                     sentenceCount: sentenceCount,
@@ -935,18 +1001,13 @@
             function resetApp() {
                 if (isListening) stopRecognition();
                 stopMonitoring();
-                currentInterim = '';
-                currentSentence = '';
-                sentenceHistory = [];
-                sentenceCount = 0;
-                updateTextDisplay();
-                updateSentenceCounter();
-                setDotGreen('off');
+                clearTextBox();
                 hasStarted = false;
                 startBtnWrap.style.display = 'block';
                 startMonitoring();
                 updateStatus('🔄 تم إعادة التعيين - اضغط "بدء الاستماع"', false);
                 setDotRed('idle');
+                clapMsg.classList.remove('show');
             }
 
             function getSentenceHistory() {
