@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>قارئ النص</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f7fa;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            max-width: 500px;
+            width: 100%;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            font-size: 24px;
+            text-align: center;
+            margin-bottom: 25px;
+        }
+        textarea {
+            width: 100%;
+            height: 150px;
+            padding: 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            font-size: 18px;
+            font-family: inherit;
+            resize: vertical;
+            transition: border-color 0.3s;
+        }
+        textarea:focus {
+            outline: none;
+            border-color: #3498db;
+        }
+        .controls {
+            margin: 20px 0;
+        }
+        .control-group {
+            margin-bottom: 18px;
+        }
+        .control-group label {
+            display: flex;
+            justify-content: space-between;
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 5px;
+        }
+        .control-group .value {
+            color: #3498db;
+        }
+        input[type="range"] {
+            width: 100%;
+            height: 6px;
+            -webkit-appearance: none;
+            background: #dde1e6;
+            border-radius: 5px;
+            outline: none;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #3498db;
+            cursor: pointer;
+        }
+        .btn {
+            width: 100%;
+            padding: 16px;
+            background: #3498db;
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 20px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-top: 10px;
+        }
+        .btn:hover {
+            background: #2980b9;
+            transform: scale(1.02);
+        }
+        .btn:active {
+            transform: scale(0.98);
+        }
+        .btn:disabled {
+            background: #bdc3c7;
+            cursor: not-allowed;
+            transform: none;
+        }
+        #status {
+            margin-top: 20px;
+            padding: 12px;
+            border-radius: 10px;
+            background: #f8f9fa;
+            min-height: 50px;
+            text-align: center;
+            color: #2c3e50;
+            font-size: 15px;
+            border: 1px solid #e0e0e0;
+        }
+        #status.error {
+            background: #fde8e8;
+            border-color: #f5c6c6;
+            color: #a94442;
+        }
+        #status.success {
+            background: #e8f4e8;
+            border-color: #c6e5c6;
+            color: #2d6a2d;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔊 قارئ النص</h1>
+        
+        <textarea id="textInput" placeholder="اكتب النص هنا...">مرحباً، هذا اختبار لخاصية تحويل النص إلى كلام.</textarea>
+        
+        <div class="controls">
+            <div class="control-group">
+                <label>
+                    <span>السرعة</span>
+                    <span class="value" id="speedValue">1.0</span>
+                </label>
+                <input type="range" id="speedSlider" min="0.5" max="2" step="0.1" value="1.0">
+            </div>
+            
+            <div class="control-group">
+                <label>
+                    <span>النبرة</span>
+                    <span class="value" id="pitchValue">1.0</span>
+                </label>
+                <input type="range" id="pitchSlider" min="0.5" max="2" step="0.1" value="1.0">
+            </div>
+        </div>
+        
+        <button class="btn" id="readBtn">📖 اقرأ النص</button>
+        
+        <div id="status">⏳ جاهز للقراءة...</div>
+    </div>
+
+    <script>
+        // التحقق من دعم متصفح كروم لأندرويد لـ Speech Synthesis
+        const statusDiv = document.getElementById('status');
+        const textInput = document.getElementById('textInput');
+        const speedSlider = document.getElementById('speedSlider');
+        const pitchSlider = document.getElementById('pitchSlider');
+        const speedValue = document.getElementById('speedValue');
+        const pitchValue = document.getElementById('pitchValue');
+        const readBtn = document.getElementById('readBtn');
+
+        // تحديث القيم المعروضة للمنزلقتين
+        speedSlider.addEventListener('input', function() {
+            speedValue.textContent = parseFloat(this.value).toFixed(1);
+        });
+
+        pitchSlider.addEventListener('input', function() {
+            pitchValue.textContent = parseFloat(this.value).toFixed(1);
+        });
+
+        // دالة عرض الحالة
+        function setStatus(message, type = 'info') {
+            statusDiv.textContent = message;
+            statusDiv.className = type;
+        }
+
+        // التحقق من دعم التطبيق
+        if (!('speechSynthesis' in window)) {
+            setStatus('❌ متصفحك لا يدعم خاصية تحويل النص إلى كلام', 'error');
+            readBtn.disabled = true;
+        } else {
+            setStatus('✅ التطبيق جاهز، اختر نصاً واضغط اقرأ', 'success');
+        }
+
+        // قراءة النص
+        readBtn.addEventListener('click', function() {
+            const text = textInput.value.trim();
+            
+            // التحقق من وجود نص
+            if (!text) {
+                setStatus('⚠️ الرجاء إدخال نص للقراءة', 'error');
+                return;
+            }
+
+            // إلغاء أي قراءة سابقة
+            if (window.speechSynthesis.speaking) {
+                window.speechSynthesis.cancel();
+                setStatus('⏸️ تم إيقاف القراءة السابقة', 'info');
+            }
+
+            // إنشاء كائن الكلام
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'ar-SA'; // اللغة العربية
+            utterance.rate = parseFloat(speedSlider.value);
+            utterance.pitch = parseFloat(pitchSlider.value);
+            utterance.volume = 1;
+
+            // أحداث التطبيق
+            utterance.onstart = function() {
+                setStatus('🔊 جاري القراءة...', 'info');
+                readBtn.textContent = '⏹️ إيقاف';
+                readBtn.style.background = '#e74c3c';
+            };
+
+            utterance.onend = function() {
+                setStatus('✅ انتهت القراءة بنجاح', 'success');
+                readBtn.textContent = '📖 اقرأ النص';
+                readBtn.style.background = '#3498db';
+            };
+
+            utterance.onerror = function(event) {
+                let errorMsg = '❌ حدث خطأ: ';
+                switch(event.error) {
+                    case 'not-allowed':
+                        errorMsg += 'الرجاء السماح للتطبيق باستخدام الصوت';
+                        break;
+                    case 'synthesis-unavailable':
+                        errorMsg += 'خدمة الترجمة الصوتية غير متوفرة حالياً';
+                        break;
+                    case 'synthesis-failed':
+                        errorMsg += 'فشل تحويل النص إلى كلام';
+                        break;
+                    default:
+                        errorMsg += event.error;
+                }
+                setStatus(errorMsg, 'error');
+                readBtn.textContent = '📖 اقرأ النص';
+                readBtn.style.background = '#3498db';
+            };
+
+            // محاولة القراءة
+            try {
+                window.speechSynthesis.speak(utterance);
+            } catch (e) {
+                setStatus('❌ خطأ غير متوقع: ' + e.message, 'error');
+                readBtn.textContent = '📖 اقرأ النص';
+                readBtn.style.background = '#3498db';
+            }
+        });
+
+        // زر الإيقاف المؤقت عند النقر مرة أخرى
+        readBtn.addEventListener('click', function() {
+            if (window.speechSynthesis.speaking) {
+                window.speechSynthesis.cancel();
+                setStatus('⏹️ تم الإيقاف', 'info');
+                readBtn.textContent = '📖 اقرأ النص';
+                readBtn.style.background = '#3498db';
+            }
+        });
+
+        // إعادة تعيين الحالة عند فقدان التركيز
+        window.addEventListener('beforeunload', function() {
+            if (window.speechSynthesis.speaking) {
+                window.speechSynthesis.cancel();
+            }
+        });
+    </script>
+</body>
+</html>
