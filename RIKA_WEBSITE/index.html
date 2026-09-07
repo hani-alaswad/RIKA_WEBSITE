@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>تحويل الكلام إلى نص - فوري ومحلي</title>
+    <title>تحويل الكلام إلى نص - نسخة مستقرة</title>
     <style>
         * {
             margin: 0;
@@ -42,7 +42,6 @@
             letter-spacing: 1px;
         }
         
-        /* مستوى الصوت */
         .volume-container {
             background: rgba(0,0,0,0.4);
             border-radius: 50px;
@@ -67,7 +66,6 @@
             font-family: monospace;
         }
         
-        /* مؤشر الاستماع */
         .listening-indicator {
             display: none;
             width: 12px;
@@ -87,7 +85,6 @@
             50% { opacity: 0.2; transform: scale(0.8); }
         }
         
-        /* زر الميكروفون */
         .mic-btn {
             width: 100px;
             height: 100px;
@@ -123,7 +120,6 @@
             50% { box-shadow: 0 0 0 20px rgba(245, 87, 108, 0); }
         }
         
-        /* صندوق النص */
         #result-box {
             margin-top: 25px;
             padding: 20px;
@@ -169,20 +165,30 @@
         
         #status {
             color: #888;
-            font-size: 13px;
+            font-size: 14px;
             margin-top: 15px;
             font-family: monospace;
         }
         
         #debug-info {
-            color: #666;
-            font-size: 11px;
+            color: #ffaa00;
+            font-size: 12px;
             margin-top: 10px;
             font-family: monospace;
-            min-height: 20px;
+            min-height: 40px;
+            background: rgba(0,0,0,0.3);
+            padding: 10px;
+            border-radius: 8px;
+            text-align: left;
+            direction: ltr;
+            white-space: pre-wrap;
+            word-break: break-all;
         }
         
-        /* تنسيق الجوال */
+        .status-ok { color: #4caf50; }
+        .status-error { color: #f44336; }
+        .status-warning { color: #ff9800; }
+        
         @media (max-width: 480px) {
             .container { padding: 20px; }
             h2 { font-size: 20px; }
@@ -194,25 +200,22 @@
 <body>
 
 <div class="container">
-    <h2>🎙️ تحويل الكلام إلى نص فوري</h2>
+    <h2>🎙️ تحويل الكلام إلى نص - نسخة مستقرة</h2>
     
-    <!-- مستوى الصوت -->
     <div class="volume-container">
         <div class="volume-bar" id="volumeBar"></div>
     </div>
     <div class="volume-text" id="volumeText">🔇 المستوى: 0 / 10</div>
     
-    <!-- مؤشر الاستماع -->
     <div class="listening-indicator" id="indicator"></div>
     
-    <!-- زر الميكروفون -->
     <button class="mic-btn" id="micBtn">🎤</button>
     
     <div id="status">⏸️ في انتظار البدء...</div>
-    <div id="debug-info"></div>
     
-    <!-- صندوق النص -->
     <div id="result-box"></div>
+    
+    <div id="debug-info">✅ جاهز للاستخدام</div>
 </div>
 
 <script>
@@ -234,225 +237,297 @@
         let animationFrame = null;
         let stream = null;
         let finalTranscript = '';
-        let restartAttempts = 0;
-        let isRestarting = false;
+        let lastFinalTranscript = '';
+        let isProcessingResult = false;
+        let recognitionStartTime = 0;
         
         // --- التحقق من الدعم ---
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (!SpeechRecognition) {
             statusText.textContent = '❌ متصفحك لا يدعم خاصية التعرف على الصوت';
+            debugInfo.textContent = '❌ خطأ: المتصفح غير مدعوم';
             micBtn.disabled = true;
             return;
         }
         
-        // --- إعداد التعرف (باستخدام إعدادات الكود القديم المحسنة) ---
+        // --- دالة لتحديث حالة التصحيح ---
+        function updateDebug(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const colors = {
+                'info': '#4caf50',
+                'error': '#f44336',
+                'warning': '#ff9800',
+                'success': '#4caf50'
+            };
+            debugInfo.innerHTML = `<span style="color: ${colors[type] || '#fff'}">[${timestamp}] ${message}</span>`;
+            console.log(`[${timestamp}] ${message}`);
+        }
+        
+        // --- إعداد التعرف المحسن ---
         function initRecognition() {
+            if (recognition) {
+                try {
+                    recognition.abort();
+                } catch (e) {}
+            }
+            
             recognition = new SpeechRecognition();
             recognition.lang = 'ar-SA';
-            recognition.continuous = true;      // استمرار الاستماع
-            recognition.interimResults = true;  // عرض نتائج مؤقتة فورية
+            recognition.continuous = true;
+            recognition.interimResults = true;
             recognition.maxAlternatives = 1;
             
-            // --- معالجة النتائج (فورية) ---
+            // --- معالجة النتائج بدون تكرار ---
             recognition.onresult = (event) => {
-                let interimTranscript = '';
-                let finalTranscriptTemp = finalTranscript;
+                if (isProcessingResult) return;
+                isProcessingResult = true;
                 
-                for (let i = event.resultIndex; i < event.results.length; i++) {
-                    const transcript = event.results[i][0].transcript;
+                try {
+                    let interimTranscript = '';
+                    let newFinalText = '';
                     
-                    if (event.results[i].isFinal) {
-                        finalTranscriptTemp += transcript + ' ';
-                        finalTranscript = finalTranscriptTemp;
-                    } else {
-                        interimTranscript += transcript;
+                    // تجميع النتائج الجديدة فقط
+                    for (let i = event.resultIndex; i < event.results.length; i++) {
+                        const transcript = event.results[i][0].transcript.trim();
+                        
+                        if (event.results[i].isFinal) {
+                            // نضيف فقط إذا كان مختلفاً عن آخر نص نهائي
+                            if (transcript && transcript !== lastFinalTranscript) {
+                                newFinalText += transcript + ' ';
+                                lastFinalTranscript = transcript;
+                            }
+                        } else {
+                            interimTranscript += transcript + ' ';
+                        }
                     }
+                    
+                    // تحديث النص النهائي
+                    if (newFinalText) {
+                        finalTranscript += newFinalText;
+                        updateDebug(`تم إضافة نص نهائي: "${newFinalText.trim()}"`, 'success');
+                    }
+                    
+                    // عرض النص الكامل
+                    let displayText = finalTranscript + interimTranscript;
+                    
+                    if (displayText.trim()) {
+                        // تقسيم إلى كلمات مع تمييز
+                        const parts = [];
+                        const finalWords = finalTranscript.trim().split(' ');
+                        const interimWords = interimTranscript.trim().split(' ');
+                        
+                        finalWords.forEach(word => {
+                            if (word) parts.push(`<span class="word final">${word}</span>`);
+                        });
+                        
+                        interimWords.forEach(word => {
+                            if (word) parts.push(`<span class="word interim">${word}</span>`);
+                        });
+                        
+                        resultBox.innerHTML = parts.join(' ');
+                    } else {
+                        resultBox.innerHTML = '';
+                    }
+                    
+                    resultBox.scrollTop = resultBox.scrollHeight;
+                    
+                } catch (e) {
+                    updateDebug(`خطأ في معالجة النتيجة: ${e.message}`, 'error');
+                } finally {
+                    isProcessingResult = false;
                 }
-                
-                // عرض النص الفوري مع تمييز بين النهائي والمؤقت
-                let displayText = finalTranscript + interimTranscript;
-                
-                if (displayText.trim()) {
-                    // تقسيم النص إلى كلمات وعرضها مع تأثير
-                    const parts = [];
-                    const finalWords = finalTranscript.trim().split(' ');
-                    const interimWords = interimTranscript.trim().split(' ');
-                    
-                    // إضافة الكلمات النهائية
-                    finalWords.forEach(word => {
-                        if (word) parts.push(`<span class="word final">${word}</span>`);
-                    });
-                    
-                    // إضافة الكلمات المؤقتة (باللون الأخضر)
-                    interimWords.forEach(word => {
-                        if (word) parts.push(`<span class="word interim">${word}</span>`);
-                    });
-                    
-                    resultBox.innerHTML = parts.join(' ');
-                } else {
-                    resultBox.innerHTML = '';
-                }
-                
-                // التمرير للأسفل تلقائياً
-                resultBox.scrollTop = resultBox.scrollHeight;
             };
             
             // --- عند بدء الاستماع ---
             recognition.onstart = () => {
                 isListening = true;
-                isRestarting = false;
+                recognitionStartTime = Date.now();
                 micBtn.classList.add('listening');
                 micBtn.textContent = '⏹️';
                 indicator.classList.add('active');
-                statusText.textContent = '🔴 جاري الاستماع... (تحدث الآن)';
+                statusText.textContent = '🔴 جاري الاستماع...';
                 finalTranscript = '';
-                restartAttempts = 0;
+                lastFinalTranscript = '';
+                updateDebug('✅ بدأ الاستماع بنجاح', 'success');
                 
-                // بدء تحليل الصوت لمستوى الضجيج
                 startVolumeMonitoring();
             };
             
             // --- عند انتهاء الاستماع ---
             recognition.onend = () => {
-                // إذا كنا في وضع إعادة التشغيل، لا نوقف كل شيء
-                if (isRestarting) {
-                    return;
-                }
-                
+                const duration = ((Date.now() - recognitionStartTime) / 1000).toFixed(1);
                 isListening = false;
                 micBtn.classList.remove('listening');
                 micBtn.textContent = '🎤';
                 indicator.classList.remove('active');
-                statusText.textContent = '⏸️ متوقف';
+                statusText.textContent = `⏸️ توقف (${duration} ثانية)`;
                 
                 stopVolumeMonitoring();
-                
-                // إذا لم يكن هناك نص، عرض رسالة
-                if (!resultBox.textContent.trim()) {
-                    resultBox.innerHTML = '';
-                }
+                updateDebug(`⏹️ توقف الاستماع بعد ${duration} ثانية`, 'warning');
             };
             
-            // --- معالجة الأخطاء ---
+            // --- معالجة الأخطاء بالتفصيل ---
             recognition.onerror = (event) => {
-                console.warn('Speech Recognition Error:', event.error);
+                const errorMessages = {
+                    'not-allowed': '❌ تم رفض إذن الميكروفون - امنح الصلاحية من المتصفح',
+                    'no-speech': '🔇 لم يتم سماع صوت - تأكد من الميكروفون وتحدث بصوت أعلى',
+                    'audio-capture': '❌ لا يمكن الوصول للميكروفون - تأكد من توصيله',
+                    'network': '🌐 مشكلة في الشبكة - تأكد من اتصال الإنترنت',
+                    'service-not-allowed': '❌ الخدمة غير مسموحة - تحقق من إعدادات المتصفح',
+                    'aborted': '⏹️ تم إيقاف الاستماع يدوياً',
+                    'language-not-supported': '⚠️ اللغة غير مدعومة بالكامل',
+                    'bad-grammar': '⚠️ خطأ في بناء الجملة'
+                };
                 
-                if (event.error === 'not-allowed') {
-                    statusText.textContent = '❌ تم رفض إذن الميكروفون';
+                const message = errorMessages[event.error] || `⚠️ خطأ غير معروف: ${event.error}`;
+                statusText.textContent = message;
+                updateDebug(message, 'error');
+                
+                // محاولة إعادة التشغيل في بعض الحالات
+                if (event.error === 'no-speech' && isListening) {
+                    updateDebug('🔄 محاولة إعادة الاستماع...', 'warning');
+                    setTimeout(() => {
+                        try {
+                            if (recognition && isListening) {
+                                recognition.stop();
+                                setTimeout(() => {
+                                    try {
+                                        recognition.start();
+                                        updateDebug('✅ تم إعادة التشغيل', 'success');
+                                    } catch (e) {
+                                        updateDebug(`❌ فشل إعادة التشغيل: ${e.message}`, 'error');
+                                    }
+                                }, 300);
+                            }
+                        } catch (e) {
+                            updateDebug(`❌ خطأ في إعادة التشغيل: ${e.message}`, 'error');
+                        }
+                    }, 500);
+                }
+                
+                // إذا كان خطأ فادح، نوقف كل شيء
+                if (['not-allowed', 'audio-capture', 'service-not-allowed'].includes(event.error)) {
                     isListening = false;
                     micBtn.classList.remove('listening');
                     micBtn.textContent = '🎤';
                     indicator.classList.remove('active');
                     stopVolumeMonitoring();
-                } else if (event.error === 'no-speech') {
-                    // لا نوقف الاستماع، نستمر
-                    statusText.textContent = '🔇 لم يتم سماع صوت، استمر في التحدث...';
-                } else if (event.error === 'audio-capture') {
-                    statusText.textContent = '❌ لا يمكن الوصول للميكروفون';
-                    isListening = false;
-                    micBtn.classList.remove('listening');
-                    micBtn.textContent = '🎤';
-                    indicator.classList.remove('active');
-                    stopVolumeMonitoring();
-                } else if (event.error === 'aborted') {
-                    // تم إيقاف الاستماع يدوياً
-                    statusText.textContent = '⏸️ تم الإيقاف';
-                } else {
-                    statusText.textContent = `⚠️ خطأ: ${event.error}`;
-                    // محاولة إعادة التشغيل التلقائي
-                    if (isListening && !isRestarting) {
-                        autoRestart();
-                    }
                 }
             };
-        }
-        
-        // --- إعادة التشغيل التلقائي في حالة الأخطاء ---
-        function autoRestart() {
-            if (isRestarting || restartAttempts > 3) return;
             
-            isRestarting = true;
-            restartAttempts++;
-            debugInfo.textContent = `🔄 محاولة إعادة التشغيل (${restartAttempts}/3)...`;
+            // --- تحسين حساسية الصوت ---
+            recognition.onaudioend = () => {
+                updateDebug('🎤 انتهى التقاط الصوت', 'info');
+            };
             
-            try {
-                if (recognition) {
-                    recognition.stop();
+            recognition.onaudiostart = () => {
+                updateDebug('🎤 بدأ التقاط الصوت', 'info');
+            };
+            
+            recognition.onsoundstart = () => {
+                updateDebug('🔊 تم اكتشاف صوت', 'success');
+                statusText.textContent = '🔊 يتم سماع صوتك...';
+            };
+            
+            recognition.onsoundend = () => {
+                updateDebug('🔇 انتهى الصوت', 'info');
+                if (isListening) {
+                    statusText.textContent = '🔴 جاري الاستماع... (تحدث)';
                 }
-            } catch (e) {}
+            };
             
-            setTimeout(() => {
-                try {
-                    if (recognition) {
-                        recognition.start();
-                        isRestarting = false;
-                        debugInfo.textContent = '✅ تم إعادة التشغيل';
-                    }
-                } catch (e) {
-                    debugInfo.textContent = `❌ فشل إعادة التشغيل: ${e.message}`;
-                    isRestarting = false;
+            recognition.onspeechstart = () => {
+                updateDebug('🗣️ بدأ الكلام', 'success');
+                statusText.textContent = '🗣️ جاري التعرف على الكلام...';
+            };
+            
+            recognition.onspeechend = () => {
+                updateDebug('✋ انتهى الكلام', 'info');
+                if (isListening) {
+                    statusText.textContent = '🔴 جاري الاستماع...';
                 }
-            }, 500);
+            };
         }
         
         // --- تهيئة التعرف ---
         initRecognition();
         
-        // --- زر الميكروفون (تبديل) ---
+        // --- زر الميكروفون ---
         micBtn.addEventListener('click', () => {
             if (!isListening) {
                 try {
-                    // إعادة تهيئة إذا لزم الأمر
                     if (!recognition) {
                         initRecognition();
                     }
+                    // إعادة تعيين النص السابق
+                    finalTranscript = '';
+                    lastFinalTranscript = '';
+                    resultBox.innerHTML = '';
                     recognition.start();
+                    updateDebug('🎤 بدأ التسجيل', 'success');
                 } catch (e) {
-                    if (e.message.includes('already started')) {
-                        recognition.stop();
-                        setTimeout(() => recognition.start(), 100);
-                    } else {
-                        statusText.textContent = '❌ خطأ: ' + e.message;
-                        debugInfo.textContent = `خطأ: ${e.message}`;
+                    const errorMsg = e.message || 'خطأ غير معروف';
+                    updateDebug(`❌ خطأ في بدء التسجيل: ${errorMsg}`, 'error');
+                    statusText.textContent = `❌ خطأ: ${errorMsg}`;
+                    
+                    // إذا كان الخطأ بسبب بدء التشغيل مرتين
+                    if (errorMsg.includes('already started')) {
+                        try {
+                            recognition.stop();
+                            setTimeout(() => {
+                                try {
+                                    recognition.start();
+                                    updateDebug('✅ تم إعادة التشغيل بنجاح', 'success');
+                                } catch (err) {
+                                    updateDebug(`❌ فشل إعادة التشغيل: ${err.message}`, 'error');
+                                }
+                            }, 300);
+                        } catch (err) {
+                            updateDebug(`❌ خطأ في الإيقاف: ${err.message}`, 'error');
+                        }
                     }
                 }
             } else {
-                isRestarting = false;
-                recognition.stop();
+                try {
+                    recognition.stop();
+                    updateDebug('⏹️ تم إيقاف التسجيل يدوياً', 'warning');
+                } catch (e) {
+                    updateDebug(`❌ خطأ في إيقاف التسجيل: ${e.message}`, 'error');
+                }
             }
         });
         
-        // --- تحليل مستوى الصوت (بنفس تقنية الكود الأول) ---
+        // --- تحسين مستوى الصوت ---
         async function startVolumeMonitoring() {
             try {
-                // الحصول على تدفق الصوت من الميكروفون
                 stream = await navigator.mediaDevices.getUserMedia({
                     audio: {
-                        echoCancellation: false,
-                        noiseSuppression: false,
-                        autoGainControl: false
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true
                     }
                 });
                 
                 audioContext = new (window.AudioContext || window.webkitAudioContext)();
                 analyser = audioContext.createAnalyser();
-                analyser.fftSize = 256;
+                analyser.fftSize = 512;
+                analyser.smoothingTimeConstant = 0.8;
                 
                 const source = audioContext.createMediaStreamSource(stream);
                 source.connect(analyser);
                 
                 dataArray = new Uint8Array(analyser.frequencyBinCount);
+                updateDebug('✅ تم تشغيل مؤشر الصوت', 'success');
                 
                 updateVolume();
             } catch (err) {
-                console.warn('لا يمكن تحليل مستوى الصوت:', err);
+                updateDebug(`⚠️ لا يمكن قياس الصوت: ${err.message}`, 'warning');
                 volumeText.textContent = '⚠️ لا يمكن قياس المستوى';
             }
         }
         
         function updateVolume() {
             if (!analyser || !isListening) {
-                // استمر في التحديث حتى إذا توقف الاستماع
                 if (animationFrame) {
                     cancelAnimationFrame(animationFrame);
                     animationFrame = null;
@@ -463,38 +538,36 @@
             try {
                 analyser.getByteFrequencyData(dataArray);
                 
-                // حساب متوسط الشدة (0-255)
                 let sum = 0;
                 for (let i = 0; i < dataArray.length; i++) {
                     sum += dataArray[i];
                 }
                 let average = sum / dataArray.length;
                 
-                // تحويل إلى مقياس 0-10
-                let level = Math.min(10, Math.floor((average / 25.5) * 1.2));
-                level = Math.max(0, level);
+                // تحسين حساسية الصوت
+                let level = Math.min(10, Math.floor((average / 20) * 1.5));
+                level = Math.max(0, Math.min(10, level));
                 
-                // تحديث الشريط
                 const percent = (level / 10) * 100;
                 volumeBar.style.width = percent + '%';
                 
-                // تحديث النص مع أيقونات
                 const icons = ['🔇', '🔈', '🔉', '🔊', '📢'];
                 let iconIndex = Math.min(4, Math.floor(level / 2.5));
                 volumeText.textContent = `${icons[iconIndex]} المستوى: ${level} / 10`;
                 
-                // تغيير لون الشريط حسب المستوى
-                if (level < 3) {
-                    volumeBar.style.background = 'linear-gradient(90deg, #00f260, #0575e6)';
-                } else if (level < 6) {
-                    volumeBar.style.background = 'linear-gradient(90deg, #f7971e, #ffd200)';
+                if (level < 2) {
+                    volumeBar.style.background = 'linear-gradient(90deg, #4caf50, #8bc34a)';
+                } else if (level < 5) {
+                    volumeBar.style.background = 'linear-gradient(90deg, #ffeb3b, #ff9800)';
+                } else if (level < 8) {
+                    volumeBar.style.background = 'linear-gradient(90deg, #ff9800, #f44336)';
                 } else {
-                    volumeBar.style.background = 'linear-gradient(90deg, #f5576c, #f093fb)';
+                    volumeBar.style.background = 'linear-gradient(90deg, #f44336, #9c27b0)';
                 }
                 
                 animationFrame = requestAnimationFrame(updateVolume);
             } catch (e) {
-                console.warn('خطأ في تحديث مستوى الصوت:', e);
+                updateDebug(`⚠️ خطأ في قياس الصوت: ${e.message}`, 'warning');
                 if (animationFrame) {
                     cancelAnimationFrame(animationFrame);
                     animationFrame = null;
@@ -522,26 +595,23 @@
             volumeText.textContent = '🔇 المستوى: 0 / 10';
         }
         
-        // --- تنظيف عند إغلاق الصفحة ---
+        // --- تنظيف عند الإغلاق ---
         window.addEventListener('beforeunload', () => {
             if (isListening && recognition) {
-                try { recognition.stop(); } catch (e) {}
+                try { recognition.abort(); } catch (e) {}
             }
             stopVolumeMonitoring();
         });
         
-        // --- معالجة حالة الصفحة (عند العودة للصفحة) ---
         document.addEventListener('visibilitychange', () => {
             if (document.hidden && isListening) {
-                // إذا غادر المستخدم الصفحة، نوقف الاستماع لتوفير الموارد
                 if (recognition) {
                     try { recognition.stop(); } catch (e) {}
                 }
             }
         });
         
-        console.log('✅ التطبيق جاهز - استخدم الميكروفون لتحويل الكلام إلى نص فوري');
-        debugInfo.textContent = '✅ جاهز للاستخدام';
+        updateDebug('✅ التطبيق جاهز للاستخدام - استخدم الميكروفون للتعرف على الكلام', 'success');
     })();
 </script>
 
