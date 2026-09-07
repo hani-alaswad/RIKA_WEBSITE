@@ -2,478 +2,1070 @@
 <html dir="rtl" lang="ar">
 <head>
     <meta charset="UTF-8">
-    <title>تعرف صوت - احترافي</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>التعرف على الصوت الذكي</title>
     <style>
+        /* ====== RESET & BASE ====== */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
         body {
-            font-family: Arial, sans-serif;
-            max-width: 600px;
-            margin: 50px auto;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #0d1117;
+            color: #e6edf3;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
             padding: 20px;
-            background: #1a1a2e;
-            color: #fff;
             direction: rtl;
         }
-        .container {
-            background: #16213e;
-            padding: 30px;
-            border-radius: 20px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+        .app-container {
+            max-width: 700px;
+            width: 100%;
+            background: #161b22;
+            border-radius: 28px;
+            padding: 30px 25px 40px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7);
+            border: 1px solid #30363d;
+            position: relative;
         }
-        button {
-            width: 100px;
-            height: 100px;
-            border-radius: 50%;
-            border: none;
-            font-size: 40px;
+        /* ====== TITLE ====== */
+        .app-title {
+            text-align: center;
+            font-weight: 300;
+            font-size: 26px;
+            letter-spacing: 0.5px;
+            color: #f0f6fc;
+            margin-bottom: 28px;
+        }
+        .app-title span {
+            color: #58a6ff;
+        }
+
+        /* ====== CONTROLS ====== */
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 16px 24px;
+            margin-bottom: 30px;
+        }
+        .switch-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 15px;
+            color: #b1bac4;
+        }
+        .switch {
+            position: relative;
+            width: 44px;
+            height: 24px;
+            background: #30363d;
+            border-radius: 40px;
             cursor: pointer;
-            background: #0f3460;
-            color: white;
-            transition: 0.3s;
-            margin: 20px auto;
-            display: block;
+            transition: 0.25s;
+            flex-shrink: 0;
+            border: 1px solid #484f58;
         }
-        button:hover { transform: scale(1.05); }
-        button.listening { 
-            background: #e94560; 
-            animation: pulse 1s infinite;
+        .switch.active {
+            background: #238636;
+            border-color: #2ea043;
         }
-        @keyframes pulse {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.05); }
+        .switch::after {
+            content: '';
+            position: absolute;
+            width: 18px;
+            height: 18px;
+            background: #f0f6fc;
+            border-radius: 50%;
+            top: 2px;
+            right: 3px;
+            transition: 0.25s;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
         }
-        #divText {
-            background: #0a0a1a;
-            padding: 20px;
-            border-radius: 12px;
-            min-height: 100px;
+        .switch.active::after {
+            right: 21px;
+            background: #ffffff;
+        }
+        .switch-label {
+            user-select: none;
+        }
+
+        /* ====== TEXT BOX ====== */
+        .text-box {
+            background: #0d1117;
+            border-radius: 16px;
+            padding: 22px 20px;
+            min-height: 110px;
             font-size: 24px;
             line-height: 1.8;
-            margin: 20px 0;
-            border: 1px solid #333;
+            color: #f0f6fc;
+            border: 1px solid #30363d;
+            margin-bottom: 18px;
+            text-align: right;
+            word-wrap: break-word;
+            transition: border 0.2s;
+            position: relative;
         }
-        #divStatus, #divError, #divVolume {
-            margin: 10px 0;
-            padding: 10px;
-            border-radius: 8px;
+        .text-box.listening {
+            border-color: #da3633;
+        }
+        .text-box:empty::before {
+            content: "⏳ في انتظار الكلام...";
+            color: #484f58;
+            font-size: 18px;
+        }
+
+        /* ====== SENTENCE COUNTER ====== */
+        .sentence-counter {
             font-size: 14px;
+            color: #8b949e;
+            text-align: left;
+            margin: -10px 0 16px 0;
+            font-family: monospace;
         }
-        #divStatus { background: #1a1a3e; color: #4fc3f7; }
-        #divError { background: #3e1a1a; color: #ff6b6b; }
-        #divVolume { background: #1a3e1a; color: #69db7c; }
-        .stats {
+
+        /* ====== VOLUME WAVEFORM ====== */
+        .wave-section {
+            background: #0d1117;
+            border-radius: 14px;
+            padding: 16px 14px 20px;
+            border: 1px solid #30363d;
+            margin-bottom: 18px;
+        }
+        .wave-header {
             display: flex;
-            justify-content: space-around;
-            margin: 15px 0;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            font-size: 14px;
+            color: #8b949e;
+        }
+        .wave-status-msg {
             font-size: 13px;
-            color: #aaa;
+            color: #f0883e;
+            min-height: 20px;
         }
-        .stat-item {
-            background: #0a0a1a;
-            padding: 8px 15px;
-            border-radius: 8px;
+        .wave-canvas-wrap {
+            width: 100%;
+            height: 60px;
+            background: #0d1117;
+            border-radius: 10px;
+            overflow: hidden;
+            position: relative;
         }
-        .stat-item span { color: #fff; font-weight: bold; }
+        #waveCanvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        .wave-level-text {
+            text-align: left;
+            font-size: 13px;
+            color: #8b949e;
+            margin-top: 5px;
+            font-family: monospace;
+        }
+
+        /* ====== INDICATORS ====== */
+        .indicators {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 35px;
+            margin: 20px 0 16px;
+        }
+        .indicator-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 15px;
+            color: #b1bac4;
+        }
+        .dot {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #484f58;
+            transition: 0.2s;
+            flex-shrink: 0;
+        }
+        .dot.red {
+            background: #da3633;
+            box-shadow: 0 0 12px #da363388;
+        }
+        .dot.red.blink {
+            animation: blink-red 0.9s infinite;
+        }
+        .dot.green {
+            background: #2ea043;
+            box-shadow: 0 0 16px #2ea04388;
+        }
+        .dot.green.blink-once {
+            animation: blink-green-once 1s forwards;
+        }
+        .dot.gray {
+            background: #484f58;
+        }
+        @keyframes blink-red {
+            0%,
+            100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+            50% {
+                opacity: 0.25;
+                transform: scale(0.85);
+            }
+        }
+        @keyframes blink-green-once {
+            0% {
+                opacity: 1;
+                transform: scale(1.2);
+                box-shadow: 0 0 30px #2ea043cc;
+            }
+            70% {
+                opacity: 1;
+                transform: scale(1);
+            }
+            100% {
+                opacity: 0.3;
+                transform: scale(0.9);
+                box-shadow: 0 0 0 #2ea04300;
+            }
+        }
+
+        /* ====== STATUS ====== */
+        .status-area {
+            background: #0d1117;
+            border-radius: 12px;
+            padding: 12px 16px;
+            font-size: 14px;
+            color: #8b949e;
+            border: 1px solid #30363d;
+            margin-top: 12px;
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 6px 12px;
+            min-height: 48px;
+            align-items: center;
+        }
+        .status-area .main-status {
+            color: #f0f6fc;
+        }
+        .status-area .error-msg {
+            color: #f85149;
+            font-size: 13px;
+        }
+
+        /* ====== RESPONSIVE ====== */
+        @media (max-width: 500px) {
+            .app-container {
+                padding: 18px 14px 28px;
+            }
+            .text-box {
+                font-size: 20px;
+                min-height: 80px;
+                padding: 16px;
+            }
+            .controls {
+                gap: 12px 16px;
+            }
+            .indicators {
+                gap: 20px;
+                flex-wrap: wrap;
+            }
+            .wave-canvas-wrap {
+                height: 46px;
+            }
+        }
     </style>
 </head>
 <body>
-<div class="container">
-    <h2>🎙️ تعرف صوت - احترافي</h2>
-    
-    <button id="btnMic">🎤</button>
-    
-    <div id="divStatus">⏸️ في انتظار البدء...</div>
-    <div id="divVolume">🔊 الصوت: 0 / 10</div>
-    
-    <div id="divText"></div>
-    
-    <div id="divError"></div>
-    
-    <div class="stats">
-        <div class="stat-item">📊 مستوى الصوت: <span id="statVolume">0%</span></div>
-        <div class="stat-item">🎯 الجودة: <span id="statQuality">منخفضة</span></div>
-        <div class="stat-item">⏱️ المدة: <span id="statDuration">0s</span></div>
+
+    <!-- ============================================================ -->
+    <!-- HTML STRUCTURE                                               -->
+    <!-- ============================================================ -->
+    <div class="app-container" id="appRoot">
+
+        <div class="app-title">🎙️ <span>تعرف</span> الصوت الذكي</div>
+
+        <!-- CONTROLS -->
+        <div class="controls">
+            <div class="switch-wrapper">
+                <span class="switch-label">الميزة</span>
+                <div class="switch active" id="mainSwitch" role="button" aria-label="تفعيل/إيقاف الميزة"></div>
+                <span class="switch-label" id="mainSwitchLabel">مفعلة</span>
+            </div>
+            <div class="switch-wrapper">
+                <span class="switch-label">تشغيل مستمر</span>
+                <div class="switch" id="continuousSwitch" role="button" aria-label="التشغيل المستمر"></div>
+                <span class="switch-label" id="continuousSwitchLabel">إيقاف</span>
+            </div>
+        </div>
+
+        <!-- TEXT BOX -->
+        <div class="text-box" id="textBox"></div>
+
+        <!-- SENTENCE COUNTER -->
+        <div class="sentence-counter" id="sentenceCounter">الجمل المستلمة: 0</div>
+
+        <!-- WAVEFORM -->
+        <div class="wave-section">
+            <div class="wave-header">
+                <span>📊 مستوى الصوت</span>
+                <span class="wave-status-msg" id="waveStatusMsg"></span>
+            </div>
+            <div class="wave-canvas-wrap">
+                <canvas id="waveCanvas"></canvas>
+            </div>
+            <div class="wave-level-text" id="waveLevelText">المستوى: 0 / 10</div>
+        </div>
+
+        <!-- INDICATORS -->
+        <div class="indicators">
+            <div class="indicator-item">
+                <span class="dot gray" id="dotRed"></span>
+                <span>الاستماع</span>
+            </div>
+            <div class="indicator-item">
+                <span class="dot gray" id="dotGreen"></span>
+                <span>جملة مكتملة</span>
+            </div>
+        </div>
+
+        <!-- STATUS -->
+        <div class="status-area">
+            <span class="main-status" id="mainStatus">⏸️ في انتظار البدء...</span>
+            <span class="error-msg" id="errorMsg"></span>
+        </div>
+
     </div>
-</div>
 
-<script>
-    // ============================================================
-    // 1. المتغيرات العامة
-    // ============================================================
-    let recognizer = null;
-    let isListening = false;
-    let fullText = '';
-    let finalResult = '';
-    let audioCtx = null;
-    let analyser = null;
-    let stream = null;
-    let volumeLevel = 0;
-    let gainNode = null;
-    let compressor = null;      // ⭐ جديد: ضاغط النطاق الديناميكي
-    let filterNode = null;      // ⭐ جديد: مرشح الترددات
-    let startTime = 0;
-    let volumeHistory = [];
+    <!-- ============================================================ -->
+    <!-- JAVASCRIPT — ALL LOGIC WRAPPED IN FUNCTIONS                  -->
+    <!-- ============================================================ -->
+    <script>
+        /* ===================================================================
+               MODULE : Smart Voice Recognition App
+               All logic is encapsulated in functions.
+               Exposed globals (for external control):
+                 - toggleMainFeature()
+                 - toggleContinuousMode()
+                 - getCurrentState()
+                 - resetApp()
+                 - getSentenceHistory()
+               =================================================================== */
 
-    // ============================================================
-    // 2. عناصر الواجهة
-    // ============================================================
-    const btnMic = document.getElementById('btnMic');
-    const divStatus = document.getElementById('divStatus');
-    const divText = document.getElementById('divText');
-    const divError = document.getElementById('divError');
-    const divVolume = document.getElementById('divVolume');
-    const statVolume = document.getElementById('statVolume');
-    const statQuality = document.getElementById('statQuality');
-    const statDuration = document.getElementById('statDuration');
+        (function() {
+            'use strict';
 
-    // ============================================================
-    // 3. دوال العرض
-    // ============================================================
-    function showError(msg) {
-        divError.textContent = '⚠️ ' + msg;
-        console.error(msg);
-        // اهتزاز بسيط للتنبيه
-        divError.style.transform = 'scale(1.02)';
-        setTimeout(() => divError.style.transform = 'scale(1)', 200);
-    }
+            // ================================================================
+            // 1. DOM REFERENCES
+            // ================================================================
+            const textBox = document.getElementById('textBox');
+            const sentenceCounter = document.getElementById('sentenceCounter');
+            const mainStatus = document.getElementById('mainStatus');
+            const errorMsg = document.getElementById('errorMsg');
+            const waveStatusMsg = document.getElementById('waveStatusMsg');
+            const waveLevelText = document.getElementById('waveLevelText');
+            const dotRed = document.getElementById('dotRed');
+            const dotGreen = document.getElementById('dotGreen');
+            const mainSwitch = document.getElementById('mainSwitch');
+            const continuousSwitch = document.getElementById('continuousSwitch');
+            const mainSwitchLabel = document.getElementById('mainSwitchLabel');
+            const continuousSwitchLabel = document.getElementById('continuousSwitchLabel');
+            const canvas = document.getElementById('waveCanvas');
+            const ctx = canvas.getContext('2d');
 
-    function setStatus(msg, type = 'info') {
-        divStatus.textContent = msg;
-        const colors = {
-            'info': '#4fc3f7',
-            'success': '#69db7c',
-            'warning': '#ffd93d',
-            'error': '#ff6b6b'
-        };
-        divStatus.style.color = colors[type] || '#4fc3f7';
-        console.log(msg);
-    }
+            // ================================================================
+            // 2. STATE VARIABLES
+            // ================================================================
+            let isMainOn = true; // الميزة الرئيسية مفعلة
+            let isContinuous = false; // التشغيل المستمر
 
-    function showText(text) {
-        divText.textContent = text || '';
-    }
+            // حالة الميكروفون والتعرف
+            let isListening = false; // هل التعرف شغال الآن؟
+            let isMonitoring = false; // هل المراقبة شغالة؟
+            let mediaStream = null;
+            let audioContext = null;
+            let analyser = null;
+            let dataArray = null;
+            let animationFrame = null;
+            let recognizer = null;
 
-    function showVolume(level) {
-        const icons = ['🔇', '🔈', '🔉', '🔊', '📢'];
-        const icon = icons[Math.min(4, Math.floor(level / 2.5))];
-        divVolume.textContent = `${icon} الصوت: ${level} / 10`;
-        
-        // تحديث الإحصائيات
-        statVolume.textContent = Math.round((level / 10) * 100) + '%';
-        
-        // تحديث جودة الصوت
-        if (level < 2) statQuality.textContent = 'ضعيف جداً';
-        else if (level < 4) statQuality.textContent = 'منخفضة';
-        else if (level < 6) statQuality.textContent = 'متوسطة';
-        else if (level < 8) statQuality.textContent = 'جيدة';
-        else statQuality.textContent = 'ممتازة';
-        
-        // تغيير لون شريط الحالة
-        if (level < 3) divVolume.style.background = '#3e1a1a';
-        else if (level < 5) divVolume.style.background = '#3e3e1a';
-        else if (level < 7) divVolume.style.background = '#1a3e1a';
-        else divVolume.style.background = '#1a3e3e';
-    }
+            // النصوص والجمل
+            let currentInterim = ''; // النص التراكمي المؤقت
+            let currentSentence = ''; // الجملة النهائية الحالية
+            let sentenceHistory = []; // سجل الجمل المكتملة
+            let sentenceCount = 0;
 
-    // ============================================================
-    // 4. دوال التحكم الرئيسية
-    // ============================================================
-    function startListening() {
-        if (isListening) {
-            showError('الاستماع قيد التشغيل بالفعل');
-            return;
-        }
+            // مؤقتات
+            let silenceTimer = null;
+            let sentenceFinalizeTimer = null;
+            let greenBlinkTimer = null;
 
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (!SpeechRecognition) {
-            showError('المتصفح لا يدعم التعرف على الصوت');
-            return;
-        }
+            // معايير
+            const VOLUME_THRESHOLD = 3;
+            const SILENCE_DURATION_MS = 15000; // 15 ثانية صمت لإيقاف التعرف
+            const SENTENCE_GAP_MS = 3000; // 3 ثواني = جملة كاملة
+            const MONITOR_INTERVAL_MS = 200; // 200ms أثناء المراقبة
+            const MONITOR_INTERVAL_OFF_MS = 500; // 500ms عند إيقاف الميزة
+            const SPEECH_FREQ_MIN = 200;
+            const SPEECH_FREQ_MAX = 3000;
 
-        recognizer = new SpeechRecognition();
-        recognizer.lang = 'ar-SA';
-        recognizer.continuous = true;
-        recognizer.interimResults = true;
-        recognizer.maxAlternatives = 1;
-        
-        // ⭐ تحسين إضافي: زيادة وقت الانتظار بين الجمل
-        recognizer.continuous = true;
+            // مستوى الصوت الحالي
+            let currentVolume = 0;
+            let waveHistory = []; // لتخزين قيم الموجة
 
-        recognizer.onstart = onStart;
-        recognizer.onend = onEnd;
-        recognizer.onresult = onResult;
-        recognizer.onerror = onError;
-
-        try {
-            recognizer.start();
-            setStatus('⏳ جاري بدء الاستماع...', 'info');
-        } catch (e) {
-            showError('فشل بدء الاستماع: ' + e.message);
-        }
-    }
-
-    function stopListening() {
-        if (!isListening) {
-            showError('الاستماع متوقف بالفعل');
-            return;
-        }
-
-        try {
-            recognizer.stop();
-            setStatus('⏹️ جاري الإيقاف...', 'info');
-        } catch (e) {
-            showError('فشل إيقاف الاستماع: ' + e.message);
-        }
-    }
-
-    function toggleListening() {
-        if (isListening) {
-            stopListening();
-        } else {
-            startListening();
-        }
-    }
-
-    // ============================================================
-    // 5. دوال الأحداث
-    // ============================================================
-
-    function onStart() {
-        isListening = true;
-        btnMic.classList.add('listening');
-        btnMic.textContent = '⏹️';
-        setStatus('🔴 جاري الاستماع...', 'info');
-        startTime = Date.now();
-        
-        fullText = '';
-        finalResult = '';
-        showText('');
-        volumeHistory = [];
-        
-        startVolumeMonitor();
-    }
-
-    function onEnd() {
-        isListening = false;
-        btnMic.classList.remove('listening');
-        btnMic.textContent = '🎤';
-        setStatus('⏸️ متوقف', 'info');
-        stopVolumeMonitor();
-    }
-
-    function onResult(event) {
-        let interimText = '';
-        let finalText = '';
-
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-            const text = event.results[i][0].transcript.trim();
-            
-            if (event.results[i].isFinal) {
-                finalText = text;
-                setStatus('✅ تم التعرف على جملة', 'success');
-            } else {
-                interimText = text;
-                setStatus('🗣️ جاري الاستماع...', 'info');
+            // ================================================================
+            // 3. CANVAS SETUP
+            // ================================================================
+            function resizeCanvas() {
+                const rect = canvas.parentElement.getBoundingClientRect();
+                canvas.width = rect.width || 600;
+                canvas.height = canvas.parentElement.clientHeight || 60;
             }
-        }
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
 
-        if (interimText) {
-            if (fullText) {
-                fullText += ' ' + interimText;
-            } else {
-                fullText = interimText;
-            }
-            showText(fullText);
-            finalResult = '';
-        } else if (finalText) {
-            finalResult = finalText;
-            fullText = '';
-            showText(finalResult);
-            setStatus('✅ النتيجة النهائية: "' + finalResult + '"', 'success');
-        }
-    }
-
-    function onError(event) {
-        const errors = {
-            'not-allowed': 'تم رفض إذن الميكروفون - امنح الصلاحية',
-            'no-speech': 'لم يتم سماع صوت - تحدث بصوت أعلى أو اقرب للميكروفون',
-            'audio-capture': 'مشكلة في الميكروفون - تأكد من توصيله',
-            'network': 'مشكلة في الإنترنت - تحقق من الاتصال',
-            'aborted': 'تم الإيقاف يدوياً',
-            'service-not-allowed': 'الخدمة غير مسموحة - تحقق من إعدادات المتصفح'
-        };
-        const msg = errors[event.error] || 'خطأ: ' + event.error;
-        showError(msg);
-        setStatus('❌ ' + msg, 'error');
-
-        if (['not-allowed', 'audio-capture', 'service-not-allowed'].includes(event.error)) {
-            if (isListening) {
-                try { recognizer.stop(); } catch (e) {}
-            }
-        }
-    }
-
-    // ============================================================
-    // 6. دوال قياس الصوت (المستوى الاحترافي)
-    // ============================================================
-    async function startVolumeMonitor() {
-        try {
-            // ⭐⭐⭐ إعدادات الميكروفون المتقدمة ⭐⭐⭐
-            stream = await navigator.mediaDevices.getUserMedia({
-                audio: {
-                    echoCancellation: true,
-                    noiseSuppression: false,     // تعطيل لتقوية الإشارة
-                    autoGainControl: true,       // تفعيل التحكم التلقائي
-                    sampleRate: 48000,           // جودة عالية
-                    channelCount: 1,              // أحادي
-                    latency: 0.01                // ⭐ تأخير منخفض
+            // ================================================================
+            // 4. UI UPDATE FUNCTIONS
+            // ================================================================
+            function updateTextDisplay() {
+                let display = currentSentence;
+                if (currentInterim) {
+                    display = display ? display + ' ' + currentInterim : currentInterim;
                 }
-            });
-
-            audioCtx = new (window.AudioContext || window.webkitAudioContext)({
-                sampleRate: 48000,
-                latencyHint: 'interactive'
-            });
-
-            // ⭐ 1. عقدة التضخيم (Gain Node) - تزيد الإشارة
-            gainNode = audioCtx.createGain();
-            gainNode.gain.value = 2.5; // مضاعفة الصوت
-
-            // ⭐ 2. عقدة الضغط (Compressor) - توازن مستويات الصوت
-            compressor = audioCtx.createDynamicsCompressor();
-            compressor.threshold.value = -30;    // عتبة الضغط
-            compressor.knee.value = 20;          // نعومة الضغط
-            compressor.ratio.value = 3;           // نسبة الضغط
-            compressor.attack.value = 0.003;      // سرعة الاستجابة
-            compressor.release.value = 0.25;      // سرعة التحرر
-
-            // ⭐ 3. مرشح الترددات (Biquad Filter) - يزيل الضوضاء المنخفضة
-            filterNode = audioCtx.createBiquadFilter();
-            filterNode.type = 'highpass';         // مرشح تمرير عالي
-            filterNode.frequency.value = 80;      // يزيل الترددات تحت 80 هيرتز
-            filterNode.Q.value = 1;
-
-            // ⭐ 4. عقدة التحليل
-            analyser = audioCtx.createAnalyser();
-            analyser.fftSize = 1024;              // دقة عالية
-            analyser.smoothingTimeConstant = 0.7;
-            analyser.minDecibels = -90;
-            analyser.maxDecibels = -10;
-
-            // ⭐ سلسلة التوصيل: مصدر → مرشح → تضخيم → ضغط → تحليل
-            const source = audioCtx.createMediaStreamSource(stream);
-            source.connect(filterNode);
-            filterNode.connect(gainNode);
-            gainNode.connect(compressor);
-            compressor.connect(analyser);
-
-            // ⭐ بدء التحديث
-            updateVolume();
-            setStatus('🎤 جاهز - تحدث الآن', 'success');
-        } catch (e) {
-            showError('لا يمكن قياس الصوت: ' + e.message);
-        }
-    }
-
-    function stopVolumeMonitor() {
-        if (stream) {
-            stream.getTracks().forEach(t => t.stop());
-            stream = null;
-        }
-        if (audioCtx && audioCtx.state !== 'closed') {
-            audioCtx.close();
-            audioCtx = null;
-        }
-        gainNode = null;
-        compressor = null;
-        filterNode = null;
-        volumeLevel = 0;
-        showVolume(0);
-        statDuration.textContent = '0s';
-    }
-
-    function updateVolume() {
-        if (!analyser || !isListening) {
-            return;
-        }
-
-        try {
-            const data = new Uint8Array(analyser.frequencyBinCount);
-            analyser.getByteFrequencyData(data);
-
-            // ⭐ حساب متوسط الشدة مع وزن للترددات المتوسطة (الكلام)
-            let sum = 0;
-            let weightedSum = 0;
-            for (let i = 0; i < data.length; i++) {
-                // وزن أكبر للترددات المتوسطة (من 300Hz إلى 3000Hz)
-                const freq = (i / data.length) * (audioCtx.sampleRate / 2);
-                const weight = (freq > 200 && freq < 3000) ? 1.5 : 0.8;
-                weightedSum += data[i] * weight;
-                sum += data[i];
+                textBox.textContent = display || '';
+                textBox.classList.toggle('listening', isListening);
             }
-            
-            // ⭐ معادلة محسنة جداً للحساسية
-            const avg = weightedSum / data.length;
-            let level = Math.min(10, Math.floor((avg / 12) * 2.0));
-            level = Math.max(0, Math.min(10, level));
 
-            // ⭐ تنعيم القيمة (لتجنب التقلبات المفاجئة)
-            volumeLevel = Math.round((volumeLevel * 0.3) + (level * 0.7));
+            function updateSentenceCounter() {
+                sentenceCounter.textContent = 'الجمل المستلمة: ' + sentenceCount;
+            }
 
-            // ⭐ تسجيل التاريخ
-            volumeHistory.push(volumeLevel);
-            if (volumeHistory.length > 100) volumeHistory.shift();
-
-            // ⭐ حساب متوسط الديسيبل
-            const avgDb = volumeHistory.reduce((a, b) => a + b, 0) / volumeHistory.length;
-
-            showVolume(volumeLevel);
-
-            // ⭐ تحديث المدة
-            const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-            statDuration.textContent = duration + 's';
-
-            // ⭐ رسائل حالة ذكية
-            if (isListening) {
-                if (volumeLevel < 2) {
-                    setStatus('🔇 صوت ضعيف جداً - قرب الميكروفون', 'warning');
-                } else if (volumeLevel < 4) {
-                    setStatus('🔈 صوت منخفض - تحدث بوضوح', 'warning');
-                } else if (volumeLevel < 6) {
-                    setStatus('🔉 صوت جيد - استمر', 'info');
-                } else if (volumeLevel < 8) {
-                    setStatus('🔊 صوت عالي - ممتاز', 'success');
+            function updateStatus(msg, isError = false) {
+                mainStatus.textContent = msg;
+                if (isError) {
+                    errorMsg.textContent = msg;
                 } else {
-                    setStatus('📢 صوت مرتفع جداً - ابتعد قليلاً', 'info');
+                    errorMsg.textContent = '';
                 }
             }
 
-            requestAnimationFrame(updateVolume);
-        } catch (e) {
-            showError('خطأ في قياس الصوت: ' + e.message);
-        }
-    }
+            function updateWaveStatus(msg) {
+                waveStatusMsg.textContent = msg;
+            }
 
-    // ============================================================
-    // 7. دوال الوصول
-    // ============================================================
-    function getVolumeLevel() { return volumeLevel; }
-    function getFinalText() { return finalResult; }
-    function getCurrentDisplayText() { return divText.textContent; }
-    function getAverageVolume() {
-        if (volumeHistory.length === 0) return 0;
-        return volumeHistory.reduce((a, b) => a + b, 0) / volumeHistory.length;
-    }
+            function updateVolumeDisplay(level) {
+                waveLevelText.textContent = 'المستوى: ' + Math.round(level) + ' / 10';
+            }
 
-    // ============================================================
-    // 8. ربط الأحداث
-    // ============================================================
-    btnMic.addEventListener('click', toggleListening);
+            function setDotRed(state) {
+                // state: 'off', 'listening', 'idle'
+                dotRed.className = 'dot';
+                if (state === 'listening') {
+                    dotRed.classList.add('red', 'blink');
+                } else if (state === 'idle') {
+                    dotRed.classList.add('gray');
+                } else {
+                    dotRed.classList.add('gray');
+                }
+            }
 
-    // ============================================================
-    // 9. بداية التشغيل
-    // ============================================================
-    setStatus('✅ جاهز - اضغط على زر التسجيل', 'success');
-    showVolume(0);
-</script>
+            function setDotGreen(state) {
+                // state: 'off', 'blink'
+                dotGreen.className = 'dot';
+                if (state === 'blink') {
+                    dotGreen.classList.add('green', 'blink-once');
+                    if (greenBlinkTimer) clearTimeout(greenBlinkTimer);
+                    greenBlinkTimer = setTimeout(() => {
+                        dotGreen.className = 'dot gray';
+                    }, 1200);
+                } else {
+                    dotGreen.classList.add('gray');
+                }
+            }
+
+            function updateSwitches() {
+                mainSwitch.classList.toggle('active', isMainOn);
+                mainSwitchLabel.textContent = isMainOn ? 'مفعلة' : 'معطلة';
+                continuousSwitch.classList.toggle('active', isContinuous);
+                continuousSwitchLabel.textContent = isContinuous ? 'مفعل' : 'إيقاف';
+            }
+
+            // ================================================================
+            // 5. VOLUME & FREQUENCY ANALYSIS
+            // ================================================================
+            function getVolumeAndFreq() {
+                if (!analyser) return { volume: 0, isSpeech: false };
+                try {
+                    const bufferLength = analyser.frequencyBinCount;
+                    const data = new Uint8Array(bufferLength);
+                    analyser.getByteFrequencyData(data);
+
+                    let sum = 0;
+                    let speechSum = 0;
+                    let speechCount = 0;
+                    const nyquist = audioContext.sampleRate / 2;
+
+                    for (let i = 0; i < bufferLength; i++) {
+                        const freq = (i / bufferLength) * nyquist;
+                        const val = data[i];
+                        sum += val;
+                        if (freq >= SPEECH_FREQ_MIN && freq <= SPEECH_FREQ_MAX) {
+                            speechSum += val;
+                            speechCount++;
+                        }
+                    }
+
+                    const avg = sum / bufferLength;
+                    const speechAvg = speechCount > 0 ? speechSum / speechCount : 0;
+
+                    // مستوى الصوت 0-10
+                    let level = Math.min(10, Math.floor((avg / 12) * 2.0));
+                    level = Math.max(0, Math.min(10, level));
+
+                    // هل الترددات مناسبة للكلام؟
+                    const isSpeech = (speechAvg > 8 && level > 1);
+
+                    return { volume: level, isSpeech: isSpeech };
+                } catch (e) {
+                    return { volume: 0, isSpeech: false };
+                }
+            }
+
+            // ================================================================
+            // 6. WAVE DRAWING
+            // ================================================================
+            function drawWave(level) {
+                const w = canvas.width;
+                const h = canvas.height;
+                ctx.clearRect(0, 0, w, h);
+
+                // إضافة القيمة الحالية إلى التاريخ
+                waveHistory.push(level);
+                if (waveHistory.length > 120) waveHistory.shift();
+
+                const barWidth = Math.max(2, (w / 120) * 0.8);
+                const gap = Math.max(1, (w / 120) * 0.2);
+                const totalBars = waveHistory.length;
+
+                for (let i = 0; i < totalBars; i++) {
+                    const val = waveHistory[i] / 10;
+                    const barHeight = val * (h * 0.85);
+                    const x = w - (i + 1) * (barWidth + gap);
+                    const y = h - barHeight - 2;
+
+                    // لون حسب المستوى
+                    let color;
+                    if (val < 0.3) color = '#30363d';
+                    else if (val < 0.5) color = '#58a6ff';
+                    else if (val < 0.7) color = '#f0883e';
+                    else color = '#da3633';
+
+                    ctx.fillStyle = color;
+                    ctx.fillRect(x, y, barWidth, barHeight);
+                }
+            }
+
+            // ================================================================
+            // 7. MONITOR LOOP (يقيس الصوت باستمرار)
+            // ================================================================
+            let monitorTimer = null;
+
+            function startMonitoring() {
+                if (monitorTimer) return;
+                isMonitoring = true;
+                const interval = isMainOn ? MONITOR_INTERVAL_MS : MONITOR_INTERVAL_OFF_MS;
+                monitorLoop(interval);
+            }
+
+            function stopMonitoring() {
+                if (monitorTimer) {
+                    cancelAnimationFrame(monitorTimer);
+                    monitorTimer = null;
+                }
+                isMonitoring = false;
+            }
+
+            function monitorLoop(interval) {
+                if (!isMonitoring) return;
+                if (!isMainOn && !isListening) {
+                    // إذا كانت الميزة معطلة ولا يوجد استماع، نقرأ ببطء
+                    doMonitorStep();
+                    monitorTimer = setTimeout(() => monitorLoop(interval), interval);
+                } else {
+                    doMonitorStep();
+                    monitorTimer = requestAnimationFrame(() => monitorLoop(interval));
+                }
+            }
+
+            function doMonitorStep() {
+                if (!analyser) return;
+                const result = getVolumeAndFreq();
+                currentVolume = result.volume;
+                const isSpeechFreq = result.isSpeech;
+
+                // تحديث الموجة
+                drawWave(currentVolume);
+                updateVolumeDisplay(currentVolume);
+
+                // ---- منطق التشغيل الذكي ----
+                if (!isMainOn) {
+                    // الميزة معطلة: لا نفعل شيئاً
+                    setDotRed('idle');
+                    if (isListening) stopRecognition();
+                    return;
+                }
+
+                // إذا كان التشغيل المستمر مفعلاً
+                if (isContinuous) {
+                    if (!isListening) {
+                        startRecognition();
+                    }
+                    return;
+                }
+
+                // ---------- الوضع الذكي ----------
+                const isLoud = currentVolume > VOLUME_THRESHOLD;
+
+                if (isLoud && isSpeechFreq) {
+                    // صوت عالٍ + ترددات مناسبة = كلام
+                    updateWaveStatus('');
+                    if (!isListening) {
+                        startRecognition();
+                    }
+                    // إعادة ضبط عداد الصمت
+                    resetSilenceTimer();
+                } else if (isLoud && !isSpeechFreq) {
+                    // صوت عالٍ لكن ترددات غير مناسبة (ضجيج)
+                    updateWaveStatus('⚠️ تردد غير مناسب للكلام');
+                    if (isListening) {
+                        // لا نوقف التعرف فوراً، نستمر
+                    }
+                } else {
+                    // صوت منخفض أو صامت
+                    updateWaveStatus('');
+                    if (isListening) {
+                        // نتحقق من الصمت الطويل
+                    }
+                }
+
+                // إذا كان مستوى الصوت منخفضاً جداً ونحن في وضع الاستماع
+                if (isListening && currentVolume < 1) {
+                    // نبدأ عد الصمت
+                }
+            }
+
+            // ================================================================
+            // 8. SILENCE TIMER (لإيقاف التعرف بعد 15 ثانية صمت)
+            // ================================================================
+            function resetSilenceTimer() {
+                if (silenceTimer) {
+                    clearTimeout(silenceTimer);
+                    silenceTimer = null;
+                }
+                // نبدأ عداد جديد
+                silenceTimer = setTimeout(() => {
+                    if (isListening && !isContinuous && isMainOn) {
+                        // 15 ثانية صمت → إيقاف التعرف
+                        stopRecognition();
+                        updateStatus('⏸️ توقف تلقائي (صمت 15 ثانية)', false);
+                        setDotRed('idle');
+                    }
+                    silenceTimer = null;
+                }, SILENCE_DURATION_MS);
+            }
+
+            // ================================================================
+            // 9. SENTENCE FINALIZER (جملة كاملة بعد 3 ثواني صمت)
+            // ================================================================
+            function resetSentenceTimer() {
+                if (sentenceFinalizeTimer) {
+                    clearTimeout(sentenceFinalizeTimer);
+                    sentenceFinalizeTimer = null;
+                }
+                sentenceFinalizeTimer = setTimeout(() => {
+                    if (isListening && currentInterim) {
+                        finalizeSentence();
+                    }
+                    sentenceFinalizeTimer = null;
+                }, SENTENCE_GAP_MS);
+            }
+
+            function finalizeSentence() {
+                if (!currentInterim) return;
+                // الجملة النهائية = النص المؤقت الحالي
+                const finalText = currentInterim.trim();
+                if (finalText) {
+                    // حفظ الجملة في السجل
+                    sentenceHistory.push(finalText);
+                    sentenceCount++;
+                    currentSentence = finalText;
+                    currentInterim = '';
+                    updateTextDisplay();
+                    updateSentenceCounter();
+                    setDotGreen('blink');
+                    updateStatus('✅ جملة مكتملة: "' + finalText + '"', false);
+                }
+            }
+
+            // ================================================================
+            // 10. RECOGNITION (Speech Recognition)
+            // ================================================================
+            function startRecognition() {
+                if (isListening) return;
+                if (!isMainOn && !isContinuous) return;
+
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                if (!SpeechRecognition) {
+                    updateStatus('❌ المتصفح لا يدعم التعرف على الصوت', true);
+                    return;
+                }
+
+                try {
+                    recognizer = new SpeechRecognition();
+                    recognizer.lang = 'ar-SA';
+                    recognizer.continuous = true;
+                    recognizer.interimResults = true;
+                    recognizer.maxAlternatives = 1;
+
+                    recognizer.onstart = function() {
+                        isListening = true;
+                        setDotRed('listening');
+                        updateStatus('🔴 جاري الاستماع...', false);
+                        textBox.classList.add('listening');
+                        // نبدأ عداد الصمت
+                        resetSilenceTimer();
+                    };
+
+                    recognizer.onend = function() {
+                        // إذا توقف التعرف بشكل غير متوقع، نحاول إعادة التشغيل إذا كنا في وضع مستمر
+                        if (isContinuous && isMainOn) {
+                            // إعادة تشغيل فورية
+                            setTimeout(() => {
+                                if (isMainOn && isContinuous) {
+                                    try { recognizer.start(); } catch (e) {}
+                                }
+                            }, 100);
+                        } else {
+                            isListening = false;
+                            setDotRed('idle');
+                            textBox.classList.remove('listening');
+                            updateStatus('⏸️ توقف التعرف', false);
+                            if (silenceTimer) {
+                                clearTimeout(silenceTimer);
+                                silenceTimer = null;
+                            }
+                        }
+                    };
+
+                    recognizer.onresult = function(event) {
+                        let interim = '';
+                        let final = '';
+
+                        for (let i = event.resultIndex; i < event.results.length; i++) {
+                            const text = event.results[i][0].transcript.trim();
+                            if (event.results[i].isFinal) {
+                                final = text;
+                            } else {
+                                interim = text;
+                            }
+                        }
+
+                        // تحديث النص المؤقت
+                        if (interim) {
+                            // إذا كانت جملة جديدة (تم إنهاء الجملة السابقة)
+                            if (currentSentence && !currentInterim) {
+                                // بدأ كلام جديد → نمسح الجملة القديمة
+                                currentSentence = '';
+                            }
+                            currentInterim = interim;
+                            updateTextDisplay();
+                            // إعادة ضبط عداد الجملة
+                            resetSentenceTimer();
+                            // إعادة ضبط عداد الصمت
+                            resetSilenceTimer();
+                        }
+
+                        if (final) {
+                            // تم التعرف على نص نهائي (توقف المستخدم مؤقتاً)
+                            // نضيفه إلى المؤقت
+                            if (currentInterim) {
+                                // دمج مع المؤقت
+                                currentInterim = currentInterim + ' ' + final;
+                            } else {
+                                currentInterim = final;
+                            }
+                            updateTextDisplay();
+                            resetSentenceTimer();
+                            resetSilenceTimer();
+                        }
+                    };
+
+                    recognizer.onerror = function(event) {
+                        const errors = {
+                            'not-allowed': '❌ تم رفض الميكروفون',
+                            'no-speech': '🔇 لم يتم سماع صوت',
+                            'audio-capture': '❌ مشكلة في الميكروفون',
+                            'network': '🌐 مشكلة في الإنترنت',
+                            'aborted': '⏹️ تم الإيقاف'
+                        };
+                        const msg = errors[event.error] || '⚠️ خطأ: ' + event.error;
+                        updateStatus(msg, true);
+
+                        if (isContinuous && isMainOn) {
+                            // إعادة تشغيل تلقائي في الوضع المستمر
+                            setTimeout(() => {
+                                if (isMainOn && isContinuous && !isListening) {
+                                    try { recognizer.start(); } catch (e) {}
+                                }
+                            }, 500);
+                        } else if (['not-allowed', 'audio-capture'].includes(event.error)) {
+                            stopRecognition();
+                        }
+                    };
+
+                    recognizer.start();
+                } catch (e) {
+                    updateStatus('❌ فشل بدء التعرف: ' + e.message, true);
+                }
+            }
+
+            function stopRecognition() {
+                if (recognizer) {
+                    try {
+                        recognizer.stop();
+                    } catch (e) {}
+                }
+                isListening = false;
+                setDotRed('idle');
+                textBox.classList.remove('listening');
+                if (silenceTimer) {
+                    clearTimeout(silenceTimer);
+                    silenceTimer = null;
+                }
+                if (sentenceFinalizeTimer) {
+                    clearTimeout(sentenceFinalizeTimer);
+                    sentenceFinalizeTimer = null;
+                }
+                updateStatus('⏸️ متوقف', false);
+            }
+
+            // ================================================================
+            // 11. AUDIO CONTEXT SETUP (الميكروفون)
+            // ================================================================
+            async function setupAudio() {
+                try {
+                    mediaStream = await navigator.mediaDevices.getUserMedia({
+                        audio: {
+                            echoCancellation: true,
+                            noiseSuppression: false,
+                            autoGainControl: true,
+                            sampleRate: 48000,
+                            channelCount: 1
+                        }
+                    });
+
+                    audioContext = new(window.AudioContext || window.webkitAudioContext)({
+                        sampleRate: 48000,
+                        latencyHint: 'interactive'
+                    });
+
+                    analyser = audioContext.createAnalyser();
+                    analyser.fftSize = 1024;
+                    analyser.smoothingTimeConstant = 0.7;
+                    analyser.minDecibels = -90;
+                    analyser.maxDecibels = -10;
+
+                    const source = audioContext.createMediaStreamSource(mediaStream);
+                    source.connect(analyser);
+
+                    // بدء المراقبة
+                    startMonitoring();
+                    updateStatus('✅ جاهز - الميكروفون يعمل', false);
+                    setDotRed('idle');
+                    return true;
+                } catch (e) {
+                    updateStatus('❌ لا يمكن الوصول للميكروفون: ' + e.message, true);
+                    return false;
+                }
+            }
+
+            // ================================================================
+            // 12. MAIN TOGGLE FUNCTIONS (للاستخدام الخارجي)
+            // ================================================================
+
+            /**
+             * تبديل الميزة الرئيسية (تشغيل/إيقاف)
+             * عند الإيقاف: يتم إيقاف التعرف لكن المراقبة تستمر (بمعدل أبطأ)
+             * عند التشغيل: تعود المراقبة للمعدل الطبيعي
+             */
+            function toggleMainFeature() {
+                isMainOn = !isMainOn;
+                updateSwitches();
+
+                if (!isMainOn) {
+                    // إيقاف التعرف إذا كان شغالاً
+                    if (isListening) {
+                        stopRecognition();
+                    }
+                    // تغيير سرعة المراقبة
+                    if (monitorTimer) {
+                        stopMonitoring();
+                        startMonitoring();
+                    }
+                    updateStatus('⏸️ الميزة معطلة (مراقبة فقط)', false);
+                } else {
+                    // تشغيل الميزة
+                    if (monitorTimer) {
+                        stopMonitoring();
+                        startMonitoring();
+                    }
+                    updateStatus('✅ الميزة مفعلة', false);
+                    // إذا كان المستمر مفعلاً، نبدأ التعرف
+                    if (isContinuous && !isListening) {
+                        startRecognition();
+                    }
+                }
+            }
+
+            /**
+             * تبديل وضع التشغيل المستمر
+             * عند التفعيل: التعرف يعمل بدون توقف ويعيد تشغيل نفسه عند أي خطأ
+             * عند الإيقاف: العودة للوضع الذكي
+             */
+            function toggleContinuousMode() {
+                isContinuous = !isContinuous;
+                updateSwitches();
+
+                if (isContinuous) {
+                    // تفعيل المستمر
+                    if (isMainOn && !isListening) {
+                        startRecognition();
+                    }
+                    updateStatus('🔁 وضع التشغيل المستمر مفعل', false);
+                } else {
+                    // إيقاف المستمر
+                    if (isListening) {
+                        stopRecognition();
+                    }
+                    updateStatus('⏸️ وضع التشغيل المستمر معطل', false);
+                    // نبدأ المراقبة من جديد
+                    if (monitorTimer) {
+                        stopMonitoring();
+                        startMonitoring();
+                    }
+                }
+            }
+
+            /**
+             * الحصول على حالة التطبيق الحالية (للاستخدام الخارجي)
+             */
+            function getCurrentState() {
+                return {
+                    isMainOn: isMainOn,
+                    isContinuous: isContinuous,
+                    isListening: isListening,
+                    isMonitoring: isMonitoring,
+                    currentVolume: currentVolume,
+                    currentSentence: currentSentence,
+                    currentInterim: currentInterim,
+                    sentenceCount: sentenceCount,
+                    sentenceHistory: sentenceHistory.slice()
+                };
+            }
+
+            /**
+             * إعادة تعيين التطبيق (مسح النصوص وإعادة التشغيل)
+             */
+            function resetApp() {
+                // إيقاف كل شيء
+                if (isListening) stopRecognition();
+                stopMonitoring();
+
+                // مسح النصوص
+                currentInterim = '';
+                currentSentence = '';
+                sentenceHistory = [];
+                sentenceCount = 0;
+                waveHistory = [];
+                updateTextDisplay();
+                updateSentenceCounter();
+                setDotGreen('off');
+
+                // إعادة تشغيل المراقبة
+                startMonitoring();
+                updateStatus('🔄 تم إعادة التعيين', false);
+            }
+
+            /**
+             * الحصول على سجل الجمل (للاستخدام الخارجي)
+             */
+            function getSentenceHistory() {
+                return sentenceHistory.slice();
+            }
+
+            // ================================================================
+            // 13. EXPOSE FUNCTIONS GLOBALLY
+            // ================================================================
+            window.toggleMainFeature = toggleMainFeature;
+            window.toggleContinuousMode = toggleContinuousMode;
+            window.getCurrentState = getCurrentState;
+            window.resetApp = resetApp;
+            window.getSentenceHistory = getSentenceHistory;
+
+            // ================================================================
+            // 14. EVENT BINDINGS (UI)
+            // ================================================================
+            mainSwitch.addEventListener('click', toggleMainFeature);
+            continuousSwitch.addEventListener('click', toggleContinuousMode);
+
+            // ================================================================
+            // 15. INITIALIZATION
+            // ================================================================
+            (async function init() {
+                // إعداد الميكروفون
+                const ok = await setupAudio();
+                if (!ok) {
+                    updateStatus('❌ فشل إعداد الميكروفون', true);
+                    return;
+                }
+                // بدء المراقبة
+                startMonitoring();
+                updateStatus('✅ جاهز - انتظر الكلام', false);
+                setDotRed('idle');
+                updateSwitches();
+                updateSentenceCounter();
+                updateTextDisplay();
+            })();
+
+            // ================================================================
+            // 16. CLEANUP
+            // ================================================================
+            window.addEventListener('beforeunload', function() {
+                if (recognizer) {
+                    try { recognizer.abort(); } catch (e) {}
+                }
+                stopMonitoring();
+                if (mediaStream) {
+                    mediaStream.getTracks().forEach(t => t.stop());
+                }
+                if (audioContext && audioContext.state !== 'closed') {
+                    audioContext.close();
+                }
+            });
+
+        })(); // end IIFE
+    </script>
+
 </body>
 </html>
