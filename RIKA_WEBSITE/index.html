@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>التعرف على الصوت الذكي 1</title>
+    <title>التعرف على الصوت الذكي</title>
     <style>
         * {
             margin: 0;
@@ -30,7 +30,6 @@
             padding: 30px 25px 40px;
             box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7);
             border: 1px solid #30363d;
-            position: relative;
         }
         .app-title {
             text-align: center;
@@ -133,11 +132,15 @@
             margin-bottom: 18px;
             text-align: right;
             word-wrap: break-word;
-            transition: border 0.2s;
+            transition: border 0.2s, background 0.3s;
             position: relative;
         }
         .text-box.listening {
             border-color: #da3633;
+        }
+        .text-box.final-sentence {
+            border-color: #2ea043;
+            background: #0d1a0d;
         }
         .text-box:empty::before {
             content: "⏳ في انتظار الكلام...";
@@ -197,7 +200,6 @@
             font-family: monospace;
         }
 
-        /* ====== SLIDER ====== */
         .slider-section {
             margin: 12px 0 18px;
             padding: 12px 14px;
@@ -360,9 +362,8 @@
 
     <div class="app-container" id="appRoot">
 
-        <div class="app-title">🎙️ <span>تعرف</span> الصوت الذكي</div>
+        <div class="app-title">🎙️ ه <span>تعرف</span> الصوت الذكي</div>
 
-        <!-- CONTROLS -->
         <div class="controls">
             <div class="switch-wrapper">
                 <span class="switch-label">الميزة</span>
@@ -376,21 +377,17 @@
             </div>
         </div>
 
-        <!-- START BUTTON -->
         <div class="btn-center" id="startBtnWrap">
             <button class="action-btn" id="startBtn">▶️ بدء الاستماع</button>
         </div>
 
-        <!-- TEXT BOX -->
         <div class="text-box" id="textBox"></div>
 
-        <!-- SENTENCE COUNTER -->
         <div class="sentence-counter" id="sentenceCounter">الجمل المستلمة: 0</div>
 
-        <!-- VOLUME INDICATOR -->
         <div class="volume-section">
             <div class="volume-header">
-                <span>📊 مستوى الصوت (مضاعف)</span>
+                <span>📊 مستوى الصوت (مضاعف ×1.5)</span>
                 <span class="volume-status-msg" id="volumeStatusMsg"></span>
             </div>
             <div class="volume-bar-bg">
@@ -399,7 +396,6 @@
             <div class="volume-level-text" id="volumeLevelText">المستوى: 0 / 10</div>
         </div>
 
-        <!-- SLIDER: عتبة التشغيل -->
         <div class="slider-section">
             <div class="slider-header">
                 <span>🔊 عتبة تشغيل الاستماع</span>
@@ -409,7 +405,6 @@
             <div style="font-size:12px;color:#484f58;margin-top:4px;">عند تجاوز هذه القيمة + تردد مناسب → يبدأ التعرف</div>
         </div>
 
-        <!-- INDICATORS -->
         <div class="indicators">
             <div class="indicator-item">
                 <span class="dot gray" id="dotRed"></span>
@@ -421,7 +416,6 @@
             </div>
         </div>
 
-        <!-- STATUS -->
         <div class="status-area">
             <span class="main-status" id="mainStatus">⏸️ في انتظار البدء...</span>
             <span class="error-msg" id="errorMsg"></span>
@@ -470,37 +464,53 @@
             let monitorTimer = null;
             let recognizer = null;
 
-            let currentInterim = '';
-            let currentSentence = '';
+            // ⭐ المتغيرات الجديدة للنص التراكمي
+            let accumulatedText = ''; // النص التراكمي (يتراكم أثناء الكلام)
+            let finalSentence = ''; // الجملة النهائية (تعرض بعد اكتمالها)
             let sentenceHistory = [];
             let sentenceCount = 0;
+            let isShowingFinal = false; // هل نعرض الجملة النهائية حالياً؟
 
             let silenceTimer = null;
             let sentenceFinalizeTimer = null;
+            let finalDisplayTimer = null;
             let greenBlinkTimer = null;
 
-            // المعايير
-            let VOLUME_THRESHOLD = 5; // القيمة الافتراضية (تتغير من السلايدر)
+            let VOLUME_THRESHOLD = 5;
             const SILENCE_DURATION_MS = 15000;
             const SENTENCE_GAP_MS = 3000;
+            const FINAL_DISPLAY_MS = 1000; // ثانية واحدة
             const MONITOR_INTERVAL_MS = 200;
             const MONITOR_INTERVAL_OFF_MS = 500;
             const SPEECH_FREQ_MIN = 200;
             const SPEECH_FREQ_MAX = 3000;
 
-            let currentVolume = 0; // 0-10 (مضاعف)
-            let isSpeechDetected = false;
+            let currentVolume = 0;
 
             // ================================================================
             // 3. UI UPDATE FUNCTIONS
             // ================================================================
             function updateTextDisplay() {
-                let display = currentSentence;
-                if (currentInterim) {
-                    display = display ? display + ' ' + currentInterim : currentInterim;
+                // إذا كنا نعرض الجملة النهائية
+                if (isShowingFinal && finalSentence) {
+                    textBox.textContent = finalSentence;
+                    textBox.classList.add('final-sentence');
+                    textBox.classList.remove('listening');
+                    return;
                 }
-                textBox.textContent = display || '';
-                textBox.classList.toggle('listening', isListening);
+
+                // عرض النص التراكمي (أثناء الاستماع)
+                textBox.classList.remove('final-sentence');
+                if (isListening && accumulatedText) {
+                    textBox.textContent = accumulatedText;
+                    textBox.classList.add('listening');
+                } else if (isListening) {
+                    textBox.textContent = '';
+                    textBox.classList.add('listening');
+                } else {
+                    textBox.textContent = '';
+                    textBox.classList.remove('listening');
+                }
             }
 
             function updateSentenceCounter() {
@@ -517,7 +527,6 @@
             }
 
             function updateVolumeDisplay(level) {
-                // مستوى مضاعف: القيم من 0-10 ولكن الحساسية مضاعفة
                 const percent = Math.min(100, (level / 10) * 100);
                 volumeBarFill.style.width = percent + '%';
                 volumeLevelText.textContent = 'المستوى: ' + Math.round(level) + ' / 10';
@@ -557,7 +566,21 @@
             }
 
             // ================================================================
-            // 4. VOLUME & FREQUENCY ANALYSIS (مضاعف)
+            // 4. CLEAR TEXT (لبدء جملة جديدة)
+            // ================================================================
+            function clearTextForNewSentence() {
+                accumulatedText = '';
+                finalSentence = '';
+                isShowingFinal = false;
+                if (finalDisplayTimer) {
+                    clearTimeout(finalDisplayTimer);
+                    finalDisplayTimer = null;
+                }
+                updateTextDisplay();
+            }
+
+            // ================================================================
+            // 5. VOLUME & FREQUENCY ANALYSIS (مضاعف ×1.5)
             // ================================================================
             function getVolumeAndFreq() {
                 if (!analyser) return { volume: 0, isSpeech: false };
@@ -584,8 +607,8 @@
                     const avg = sum / bufferLength;
                     const speechAvg = speechCount > 0 ? speechSum / speechCount : 0;
 
-                    // مستوى مضاعف (×2) لجعل الحساسية أعلى
-                    let level = Math.min(10, Math.floor((avg / 6) * 1.8));
+                    // ⭐ مضاعفة ×1.5 (بدلاً من ×2)
+                    let level = Math.min(10, Math.floor((avg / 8) * 1.5));
                     level = Math.max(0, Math.min(10, level));
 
                     const isSpeech = (speechAvg > 8 && level > 1);
@@ -597,7 +620,7 @@
             }
 
             // ================================================================
-            // 5. MONITOR LOOP
+            // 6. MONITOR LOOP
             // ================================================================
             function startMonitoring() {
                 if (monitorTimer) return;
@@ -642,6 +665,8 @@
                 // ---- التشغيل المستمر ----
                 if (isContinuous) {
                     if (!isListening) {
+                        // حذف النص القديم عند بدء تشغيل مستمر
+                        clearTextForNewSentence();
                         startRecognition();
                     }
                     return;
@@ -651,30 +676,23 @@
                 const isLoud = currentVolume > VOLUME_THRESHOLD;
 
                 if (isLoud && isSpeechFreq) {
-                    // ✅ صوت عالٍ + تردد مناسب → تشغيل الاستماع
                     updateVolumeStatus('✅ تردد مناسب - بدء الاستماع');
+
+                    // إذا كنا نعرض جملة نهائية حالياً، نحذفها لبدء جملة جديدة
+                    if (isShowingFinal) {
+                        clearTextForNewSentence();
+                    }
+
                     if (!isListening) {
-                        // حذف النص القديم عند بدء جملة جديدة
-                        if (currentSentence || currentInterim) {
-                            currentSentence = '';
-                            currentInterim = '';
-                            updateTextDisplay();
-                        }
+                        // بدء استماع جديد → نمسح النص القديم
+                        clearTextForNewSentence();
                         startRecognition();
                     }
                     resetSilenceTimer();
                 } else if (isLoud && !isSpeechFreq) {
-                    // ❌ صوت عالٍ لكن تردد غير مناسب
                     updateVolumeStatus('⚠️ تردد غير مناسب للكلام');
-                    if (isListening) {
-                        // نستمر في الاستماع إذا كان شغالاً
-                    }
                 } else {
-                    // صوت منخفض
                     updateVolumeStatus('');
-                    if (isListening) {
-                        // نستمر، silenceTimer يتولى الباقي
-                    }
                 }
 
                 // إيقاف التعرف إذا كان الصمت 15 ثانية والمستوى < 2
@@ -684,7 +702,7 @@
             }
 
             // ================================================================
-            // 6. SILENCE TIMER (15 ثانية صمت)
+            // 7. SILENCE TIMER (15 ثانية صمت)
             // ================================================================
             function resetSilenceTimer() {
                 if (silenceTimer) {
@@ -694,7 +712,6 @@
                 silenceTimer = setTimeout(() => {
                     if (isListening && !isContinuous && isMainOn && hasStarted) {
                         if (currentVolume < 2) {
-                            // إيقاف الاستماع بعد صمت
                             stopRecognition();
                             updateStatus('⏸️ توقف تلقائي (صمت 15 ثانية)', false);
                             setDotRed('idle');
@@ -707,7 +724,7 @@
             }
 
             // ================================================================
-            // 7. SENTENCE FINALIZER (3 ثواني صمت = جملة كاملة)
+            // 8. SENTENCE FINALIZER (3 ثواني صمت = جملة كاملة)
             // ================================================================
             function resetSentenceTimer() {
                 if (sentenceFinalizeTimer) {
@@ -715,7 +732,7 @@
                     sentenceFinalizeTimer = null;
                 }
                 sentenceFinalizeTimer = setTimeout(() => {
-                    if (isListening && currentInterim) {
+                    if (isListening && accumulatedText) {
                         finalizeSentence();
                     }
                     sentenceFinalizeTimer = null;
@@ -723,29 +740,51 @@
             }
 
             function finalizeSentence() {
-                if (!currentInterim) return;
-                const finalText = currentInterim.trim();
-                if (finalText) {
-                    sentenceHistory.push(finalText);
-                    sentenceCount++;
-                    currentSentence = finalText;
-                    currentInterim = '';
-                    updateTextDisplay();
-                    updateSentenceCounter();
-                    setDotGreen('blink');
-                    updateStatus('✅ جملة مكتملة: "' + finalText + '"', false);
+                if (!accumulatedText) return;
 
-                    // ⭐ بعد اكتمال الجملة، نوقف الاستماع ونعود للمراقبة
-                    if (!isContinuous && isMainOn) {
+                // ⭐ 1. الجملة النهائية = النص التراكمي
+                finalSentence = accumulatedText.trim();
+
+                if (finalSentence) {
+                    // ⭐ 2. حفظ في السجل
+                    sentenceHistory.push(finalSentence);
+                    sentenceCount++;
+                    updateSentenceCounter();
+
+                    // ⭐ 3. مسح النص التراكمي
+                    accumulatedText = '';
+
+                    // ⭐ 4. عرض الجملة النهائية
+                    isShowingFinal = true;
+                    updateTextDisplay();
+                    setDotGreen('blink');
+                    updateStatus('✅ جملة مكتملة: "' + finalSentence + '"', false);
+
+                    // ⭐ 5. إيقاف الاستماع
+                    if (!isContinuous) {
                         stopRecognition();
                         setDotRed('idle');
-                        updateStatus('⏸️ تم إيقاف الاستماع - في انتظار كلام جديد', false);
                     }
+
+                    // ⭐ 6. بعد ثانية واحدة، نمسح الجملة النهائية
+                    if (finalDisplayTimer) {
+                        clearTimeout(finalDisplayTimer);
+                        finalDisplayTimer = null;
+                    }
+                    finalDisplayTimer = setTimeout(() => {
+                        isShowingFinal = false;
+                        finalSentence = '';
+                        updateTextDisplay();
+                        if (!isContinuous) {
+                            updateStatus('⏸️ جاهز لجملة جديدة - تحدث', false);
+                        }
+                        finalDisplayTimer = null;
+                    }, FINAL_DISPLAY_MS);
                 }
             }
 
             // ================================================================
-            // 8. RECOGNITION
+            // 9. RECOGNITION
             // ================================================================
             function startRecognition() {
                 if (isListening) return;
@@ -784,7 +823,9 @@
                             isListening = false;
                             setDotRed('idle');
                             textBox.classList.remove('listening');
-                            updateStatus('⏸️ توقف التعرف', false);
+                            if (!isShowingFinal) {
+                                updateStatus('⏸️ توقف التعرف', false);
+                            }
                             if (silenceTimer) {
                                 clearTimeout(silenceTimer);
                                 silenceTimer = null;
@@ -805,21 +846,42 @@
                             }
                         }
 
+                        // ⭐ معالجة النص - تراكمي بدون تكرار
                         if (interim) {
-                            if (currentSentence && !currentInterim) {
-                                currentSentence = '';
+                            // إذا كنا نعرض جملة نهائية، نمسحها عند بدء كلام جديد
+                            if (isShowingFinal) {
+                                isShowingFinal = false;
+                                finalSentence = '';
                             }
-                            currentInterim = interim;
+
+                            // نضيف النص المؤقت إلى التراكمي (بدون تكرار)
+                            if (accumulatedText) {
+                                // نتحقق أن النص الجديد ليس مكرراً
+                                if (!accumulatedText.includes(interim)) {
+                                    accumulatedText += ' ' + interim;
+                                }
+                            } else {
+                                accumulatedText = interim;
+                            }
                             updateTextDisplay();
                             resetSentenceTimer();
                             resetSilenceTimer();
                         }
 
                         if (final) {
-                            if (currentInterim) {
-                                currentInterim = currentInterim + ' ' + final;
+                            // النص النهائي (من المتصفح) نضيفه بحذر
+                            if (isShowingFinal) {
+                                isShowingFinal = false;
+                                finalSentence = '';
+                            }
+
+                            // نضيف النص النهائي إذا لم يكن موجوداً بالفعل
+                            if (accumulatedText) {
+                                if (!accumulatedText.includes(final)) {
+                                    accumulatedText += ' ' + final;
+                                }
                             } else {
-                                currentInterim = final;
+                                accumulatedText = final;
                             }
                             updateTextDisplay();
                             resetSentenceTimer();
@@ -870,11 +932,13 @@
                     clearTimeout(sentenceFinalizeTimer);
                     sentenceFinalizeTimer = null;
                 }
-                updateStatus('⏸️ متوقف', false);
+                if (!isShowingFinal) {
+                    updateStatus('⏸️ متوقف', false);
+                }
             }
 
             // ================================================================
-            // 9. AUDIO SETUP
+            // 10. AUDIO SETUP
             // ================================================================
             async function setupAudio() {
                 try {
@@ -913,13 +977,14 @@
             }
 
             // ================================================================
-            // 10. START BUTTON
+            // 11. START BUTTON
             // ================================================================
             function handleStart() {
                 if (hasStarted) return;
                 hasStarted = true;
                 startBtnWrap.style.display = 'none';
                 updateStatus('🔴 جاري الاستماع...', false);
+                clearTextForNewSentence();
                 if (isContinuous && isMainOn) {
                     startRecognition();
                 }
@@ -930,7 +995,7 @@
             }
 
             // ================================================================
-            // 11. MAIN TOGGLE FUNCTIONS
+            // 12. MAIN TOGGLE FUNCTIONS
             // ================================================================
             function toggleMainFeature() {
                 isMainOn = !isMainOn;
@@ -942,10 +1007,7 @@
                         stopMonitoring();
                         startMonitoring();
                     }
-                    // حذف النص
-                    currentSentence = '';
-                    currentInterim = '';
-                    updateTextDisplay();
+                    clearTextForNewSentence();
                     updateStatus('⏸️ الميزة معطلة (مراقبة فقط)', false);
                 } else {
                     if (monitorTimer) {
@@ -953,13 +1015,10 @@
                         startMonitoring();
                     }
                     updateStatus('✅ الميزة مفعلة', false);
+                    clearTextForNewSentence();
                     if (isContinuous && hasStarted && !isListening) {
                         startRecognition();
                     }
-                    // حذف النص عند إعادة التشغيل
-                    currentSentence = '';
-                    currentInterim = '';
-                    updateTextDisplay();
                 }
             }
 
@@ -969,6 +1028,7 @@
 
                 if (isContinuous) {
                     if (isMainOn && hasStarted && !isListening) {
+                        clearTextForNewSentence();
                         startRecognition();
                     }
                     updateStatus('🔁 وضع التشغيل المستمر مفعل', false);
@@ -983,7 +1043,7 @@
             }
 
             // ================================================================
-            // 12. THRESHOLD SLIDER
+            // 13. THRESHOLD SLIDER
             // ================================================================
             thresholdSlider.addEventListener('input', function() {
                 VOLUME_THRESHOLD = parseFloat(this.value);
@@ -991,7 +1051,7 @@
             });
 
             // ================================================================
-            // 13. EXPOSE GLOBALLY
+            // 14. EXPOSE GLOBALLY
             // ================================================================
             window.toggleMainFeature = toggleMainFeature;
             window.toggleContinuousMode = toggleContinuousMode;
@@ -1002,8 +1062,9 @@
                     isListening: isListening,
                     hasStarted: hasStarted,
                     currentVolume: currentVolume,
-                    currentSentence: currentSentence,
-                    currentInterim: currentInterim,
+                    accumulatedText: accumulatedText,
+                    finalSentence: finalSentence,
+                    isShowingFinal: isShowingFinal,
                     sentenceCount: sentenceCount,
                     sentenceHistory: sentenceHistory.slice(),
                     threshold: VOLUME_THRESHOLD
@@ -1012,11 +1073,9 @@
             window.resetApp = function() {
                 if (isListening) stopRecognition();
                 stopMonitoring();
-                currentInterim = '';
-                currentSentence = '';
+                clearTextForNewSentence();
                 sentenceHistory = [];
                 sentenceCount = 0;
-                updateTextDisplay();
                 updateSentenceCounter();
                 setDotGreen('off');
                 hasStarted = false;
@@ -1030,14 +1089,14 @@
             };
 
             // ================================================================
-            // 14. EVENT BINDINGS
+            // 15. EVENT BINDINGS
             // ================================================================
             mainSwitch.addEventListener('click', toggleMainFeature);
             continuousSwitch.addEventListener('click', toggleContinuousMode);
             startBtn.addEventListener('click', handleStart);
 
             // ================================================================
-            // 15. INIT
+            // 16. INIT
             // ================================================================
             (async function init() {
                 const ok = await setupAudio();
@@ -1056,7 +1115,7 @@
             })();
 
             // ================================================================
-            // 16. CLEANUP
+            // 17. CLEANUP
             // ================================================================
             window.addEventListener('beforeunload', function() {
                 if (recognizer) {
@@ -1073,6 +1132,6 @@
 
         })();
     </script>
-2
+
 </body>
 </html>
