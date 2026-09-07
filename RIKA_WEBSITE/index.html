@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>تحويل الكلام إلى نص بصمت</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7f6;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .container {
+            background-white: #fff;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            text-align: center;
+            width: 90%;
+            max-width: 500px;
+            background: white;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+        button:hover { background-color: #0056b3; }
+        button.listening { background-color: #dc3545; }
+        #result-box {
+            margin-top: 20px;
+            padding: 15px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            min-height: 100px;
+            background-color: #fafafa;
+            text-align: right;
+            font-size: 18px;
+        }
+        #status { color: #666; font-size: 14px; margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>تحويل الكلام إلى نص</h2>
+    <div id="status">اضغط على الزر للتحدث</div>
+    <button id="start-btn">ابدأ الاستماع</button>
+    <div id="result-box" id="output">النص سيظهر هنا...</div>
+</div>
+
+<script>
+    // التأكد من دعم المتصفح للخاصية
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    
+    if (!SpeechRecognition) {
+        alert("عذراً، متصفحك لا يدعم خاصية التعرف على الصوت. يرجى استخدام Google Chrome.");
+    } else {
+        const recognition = new SpeechRecognition();
+        
+        // إعدادات التعرف على الصوت
+        recognition.lang = 'ar-SA'; // تحديد اللغة العربية
+        recognition.continuous = false; // الاستماع لمرة واحدة عند الضغط (كما طلبت)
+        recognition.interimResults = false; // عدم إظهار نتائج مؤقتة
+
+        const startBtn = document.getElementById('start-btn');
+        const statusTxt = document.getElementById('status');
+        const resultBox = document.getElementById('result-box');
+        
+        let isListening = false;
+
+        startBtn.addEventListener('click', () => {
+            if (!isListening) {
+                recognition.start();
+            } else {
+                recognition.stop();
+            }
+        });
+
+        // عند بدء الاستماع فعلياً
+        recognition.onstart = () => {
+            isListening = true;
+            startBtn.innerText = "جاري الاستماع... (اضغط للإيقاف)";
+            startBtn.classList.add('listening');
+            statusTxt.innerText = "يمكنك التحدث الآن، الميكروفون يعمل بصمت.";
+        };
+
+        // عند الانتهاء والحصول على النص
+        recognition.onresult = (event) => {
+            const transcript = event.results[0][0].transcript;
+            resultBox.innerText = transcript;
+        };
+
+        // عند توقف الميكروفون
+        recognition.onend = () => {
+            isListening = false;
+            startBtn.innerText = "ابدأ الاستماع";
+            startBtn.classList.remove('listening');
+            statusTxt.innerText = "تم إيقاف الاستماع.";
+        };
+
+        // في حال حدوث خطأ
+        recognition.onerror = (event) => {
+            statusTxt.innerText = "حدث خطأ أثناء الاستماع: " + event.error;
+        };
+    }
+</script>
+
+</body>
+</html>
