@@ -2,296 +2,478 @@
 <html dir="rtl" lang="ar">
 <head>
     <meta charset="UTF-8">
-    <title>تعرف صوت - حساسية عالية</title>
+    <title>تعرف صوت - احترافي</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #1a1a2e;
+            color: #fff;
+            direction: rtl;
+        }
+        .container {
+            background: #16213e;
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+        }
+        button {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            border: none;
+            font-size: 40px;
+            cursor: pointer;
+            background: #0f3460;
+            color: white;
+            transition: 0.3s;
+            margin: 20px auto;
+            display: block;
+        }
+        button:hover { transform: scale(1.05); }
+        button.listening { 
+            background: #e94560; 
+            animation: pulse 1s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+        #divText {
+            background: #0a0a1a;
+            padding: 20px;
+            border-radius: 12px;
+            min-height: 100px;
+            font-size: 24px;
+            line-height: 1.8;
+            margin: 20px 0;
+            border: 1px solid #333;
+        }
+        #divStatus, #divError, #divVolume {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+        #divStatus { background: #1a1a3e; color: #4fc3f7; }
+        #divError { background: #3e1a1a; color: #ff6b6b; }
+        #divVolume { background: #1a3e1a; color: #69db7c; }
+        .stats {
+            display: flex;
+            justify-content: space-around;
+            margin: 15px 0;
+            font-size: 13px;
+            color: #aaa;
+        }
+        .stat-item {
+            background: #0a0a1a;
+            padding: 8px 15px;
+            border-radius: 8px;
+        }
+        .stat-item span { color: #fff; font-weight: bold; }
+    </style>
 </head>
 <body>
-    <button id="btnMic">🎤 تسجيل o</button>
-    <div id="divStatus">جاهز</div>
+<div class="container">
+    <h2>🎙️ تعرف صوت - احترافي</h2>
+    
+    <button id="btnMic">🎤</button>
+    
+    <div id="divStatus">⏸️ في انتظار البدء...</div>
+    <div id="divVolume">🔊 الصوت: 0 / 10</div>
+    
     <div id="divText"></div>
+    
     <div id="divError"></div>
-    <div id="divVolume">الصوت: 0</div>
+    
+    <div class="stats">
+        <div class="stat-item">📊 مستوى الصوت: <span id="statVolume">0%</span></div>
+        <div class="stat-item">🎯 الجودة: <span id="statQuality">منخفضة</span></div>
+        <div class="stat-item">⏱️ المدة: <span id="statDuration">0s</span></div>
+    </div>
+</div>
 
-    <script>
-        // ============================================================
-        // 1. المتغيرات العامة
-        // ============================================================
-        let recognizer = null;
-        let isListening = false;
-        let fullText = '';
-        let finalResult = '';
-        let audioCtx = null;
-        let analyser = null;
-        let stream = null;
-        let volumeLevel = 0;
-        let gainNode = null; // ⭐ جديد: للتحكم في حساسية الصوت
+<script>
+    // ============================================================
+    // 1. المتغيرات العامة
+    // ============================================================
+    let recognizer = null;
+    let isListening = false;
+    let fullText = '';
+    let finalResult = '';
+    let audioCtx = null;
+    let analyser = null;
+    let stream = null;
+    let volumeLevel = 0;
+    let gainNode = null;
+    let compressor = null;      // ⭐ جديد: ضاغط النطاق الديناميكي
+    let filterNode = null;      // ⭐ جديد: مرشح الترددات
+    let startTime = 0;
+    let volumeHistory = [];
 
-        // ============================================================
-        // 2. عناصر الواجهة
-        // ============================================================
-        const btnMic = document.getElementById('btnMic');
-        const divStatus = document.getElementById('divStatus');
-        const divText = document.getElementById('divText');
-        const divError = document.getElementById('divError');
-        const divVolume = document.getElementById('divVolume');
+    // ============================================================
+    // 2. عناصر الواجهة
+    // ============================================================
+    const btnMic = document.getElementById('btnMic');
+    const divStatus = document.getElementById('divStatus');
+    const divText = document.getElementById('divText');
+    const divError = document.getElementById('divError');
+    const divVolume = document.getElementById('divVolume');
+    const statVolume = document.getElementById('statVolume');
+    const statQuality = document.getElementById('statQuality');
+    const statDuration = document.getElementById('statDuration');
 
-        // ============================================================
-        // 3. دوال العرض
-        // ============================================================
-        function showError(msg) {
-            divError.textContent = '⚠️ ' + msg;
-            console.error(msg);
+    // ============================================================
+    // 3. دوال العرض
+    // ============================================================
+    function showError(msg) {
+        divError.textContent = '⚠️ ' + msg;
+        console.error(msg);
+        // اهتزاز بسيط للتنبيه
+        divError.style.transform = 'scale(1.02)';
+        setTimeout(() => divError.style.transform = 'scale(1)', 200);
+    }
+
+    function setStatus(msg, type = 'info') {
+        divStatus.textContent = msg;
+        const colors = {
+            'info': '#4fc3f7',
+            'success': '#69db7c',
+            'warning': '#ffd93d',
+            'error': '#ff6b6b'
+        };
+        divStatus.style.color = colors[type] || '#4fc3f7';
+        console.log(msg);
+    }
+
+    function showText(text) {
+        divText.textContent = text || '';
+    }
+
+    function showVolume(level) {
+        const icons = ['🔇', '🔈', '🔉', '🔊', '📢'];
+        const icon = icons[Math.min(4, Math.floor(level / 2.5))];
+        divVolume.textContent = `${icon} الصوت: ${level} / 10`;
+        
+        // تحديث الإحصائيات
+        statVolume.textContent = Math.round((level / 10) * 100) + '%';
+        
+        // تحديث جودة الصوت
+        if (level < 2) statQuality.textContent = 'ضعيف جداً';
+        else if (level < 4) statQuality.textContent = 'منخفضة';
+        else if (level < 6) statQuality.textContent = 'متوسطة';
+        else if (level < 8) statQuality.textContent = 'جيدة';
+        else statQuality.textContent = 'ممتازة';
+        
+        // تغيير لون شريط الحالة
+        if (level < 3) divVolume.style.background = '#3e1a1a';
+        else if (level < 5) divVolume.style.background = '#3e3e1a';
+        else if (level < 7) divVolume.style.background = '#1a3e1a';
+        else divVolume.style.background = '#1a3e3e';
+    }
+
+    // ============================================================
+    // 4. دوال التحكم الرئيسية
+    // ============================================================
+    function startListening() {
+        if (isListening) {
+            showError('الاستماع قيد التشغيل بالفعل');
+            return;
         }
 
-        function setStatus(msg) {
-            divStatus.textContent = msg;
-            console.log(msg);
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+            showError('المتصفح لا يدعم التعرف على الصوت');
+            return;
         }
 
-        function showText(text) {
-            divText.textContent = text || '';
+        recognizer = new SpeechRecognition();
+        recognizer.lang = 'ar-SA';
+        recognizer.continuous = true;
+        recognizer.interimResults = true;
+        recognizer.maxAlternatives = 1;
+        
+        // ⭐ تحسين إضافي: زيادة وقت الانتظار بين الجمل
+        recognizer.continuous = true;
+
+        recognizer.onstart = onStart;
+        recognizer.onend = onEnd;
+        recognizer.onresult = onResult;
+        recognizer.onerror = onError;
+
+        try {
+            recognizer.start();
+            setStatus('⏳ جاري بدء الاستماع...', 'info');
+        } catch (e) {
+            showError('فشل بدء الاستماع: ' + e.message);
+        }
+    }
+
+    function stopListening() {
+        if (!isListening) {
+            showError('الاستماع متوقف بالفعل');
+            return;
         }
 
-        function showVolume(level) {
-            divVolume.textContent = '🔊 الصوت: ' + level + '/10';
+        try {
+            recognizer.stop();
+            setStatus('⏹️ جاري الإيقاف...', 'info');
+        } catch (e) {
+            showError('فشل إيقاف الاستماع: ' + e.message);
         }
+    }
 
-        // ============================================================
-        // 4. دوال التحكم الرئيسية
-        // ============================================================
-        function startListening() {
-            if (isListening) {
-                showError('الاستماع قيد التشغيل بالفعل');
-                return;
-            }
+    function toggleListening() {
+        if (isListening) {
+            stopListening();
+        } else {
+            startListening();
+        }
+    }
 
-            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-            if (!SpeechRecognition) {
-                showError('المتصفح لا يدعم التعرف على الصوت');
-                return;
-            }
+    // ============================================================
+    // 5. دوال الأحداث
+    // ============================================================
 
-            recognizer = new SpeechRecognition();
-            recognizer.lang = 'ar-SA';
-            recognizer.continuous = true;
-            recognizer.interimResults = true;
+    function onStart() {
+        isListening = true;
+        btnMic.classList.add('listening');
+        btnMic.textContent = '⏹️';
+        setStatus('🔴 جاري الاستماع...', 'info');
+        startTime = Date.now();
+        
+        fullText = '';
+        finalResult = '';
+        showText('');
+        volumeHistory = [];
+        
+        startVolumeMonitor();
+    }
+
+    function onEnd() {
+        isListening = false;
+        btnMic.classList.remove('listening');
+        btnMic.textContent = '🎤';
+        setStatus('⏸️ متوقف', 'info');
+        stopVolumeMonitor();
+    }
+
+    function onResult(event) {
+        let interimText = '';
+        let finalText = '';
+
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+            const text = event.results[i][0].transcript.trim();
             
-            // ⭐ تحسينات إضافية للتعرف
-            recognizer.maxAlternatives = 1;
-
-            recognizer.onstart = onStart;
-            recognizer.onend = onEnd;
-            recognizer.onresult = onResult;
-            recognizer.onerror = onError;
-
-            try {
-                recognizer.start();
-                setStatus('⏳ جاري بدء الاستماع...');
-            } catch (e) {
-                showError('فشل بدء الاستماع: ' + e.message);
-            }
-        }
-
-        function stopListening() {
-            if (!isListening) {
-                showError('الاستماع متوقف بالفعل');
-                return;
-            }
-
-            try {
-                recognizer.stop();
-                setStatus('⏹️ جاري الإيقاف...');
-            } catch (e) {
-                showError('فشل إيقاف الاستماع: ' + e.message);
-            }
-        }
-
-        function toggleListening() {
-            if (isListening) {
-                stopListening();
+            if (event.results[i].isFinal) {
+                finalText = text;
+                setStatus('✅ تم التعرف على جملة', 'success');
             } else {
-                startListening();
+                interimText = text;
+                setStatus('🗣️ جاري الاستماع...', 'info');
             }
         }
 
-        // ============================================================
-        // 5. دوال الأحداث
-        // ============================================================
-
-        function onStart() {
-            isListening = true;
-            btnMic.textContent = '⏹️ إيقاف';
-            setStatus('🔴 جاري الاستماع...');
-            
-            fullText = '';
+        if (interimText) {
+            if (fullText) {
+                fullText += ' ' + interimText;
+            } else {
+                fullText = interimText;
+            }
+            showText(fullText);
             finalResult = '';
-            showText('');
-            
-            startVolumeMonitor();
+        } else if (finalText) {
+            finalResult = finalText;
+            fullText = '';
+            showText(finalResult);
+            setStatus('✅ النتيجة النهائية: "' + finalResult + '"', 'success');
         }
+    }
 
-        function onEnd() {
-            isListening = false;
-            btnMic.textContent = '🎤 تسجيل';
-            setStatus('⏸️ متوقف');
-            stopVolumeMonitor();
+    function onError(event) {
+        const errors = {
+            'not-allowed': 'تم رفض إذن الميكروفون - امنح الصلاحية',
+            'no-speech': 'لم يتم سماع صوت - تحدث بصوت أعلى أو اقرب للميكروفون',
+            'audio-capture': 'مشكلة في الميكروفون - تأكد من توصيله',
+            'network': 'مشكلة في الإنترنت - تحقق من الاتصال',
+            'aborted': 'تم الإيقاف يدوياً',
+            'service-not-allowed': 'الخدمة غير مسموحة - تحقق من إعدادات المتصفح'
+        };
+        const msg = errors[event.error] || 'خطأ: ' + event.error;
+        showError(msg);
+        setStatus('❌ ' + msg, 'error');
+
+        if (['not-allowed', 'audio-capture', 'service-not-allowed'].includes(event.error)) {
+            if (isListening) {
+                try { recognizer.stop(); } catch (e) {}
+            }
         }
+    }
 
-        function onResult(event) {
-            let interimText = '';
-            let finalText = '';
-
-            for (let i = event.resultIndex; i < event.results.length; i++) {
-                const text = event.results[i][0].transcript.trim();
-                
-                if (event.results[i].isFinal) {
-                    finalText = text;
-                } else {
-                    interimText = text;
+    // ============================================================
+    // 6. دوال قياس الصوت (المستوى الاحترافي)
+    // ============================================================
+    async function startVolumeMonitor() {
+        try {
+            // ⭐⭐⭐ إعدادات الميكروفون المتقدمة ⭐⭐⭐
+            stream = await navigator.mediaDevices.getUserMedia({
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: false,     // تعطيل لتقوية الإشارة
+                    autoGainControl: true,       // تفعيل التحكم التلقائي
+                    sampleRate: 48000,           // جودة عالية
+                    channelCount: 1,              // أحادي
+                    latency: 0.01                // ⭐ تأخير منخفض
                 }
-            }
+            });
 
-            if (interimText) {
-                if (fullText) {
-                    fullText += ' ' + interimText;
-                } else {
-                    fullText = interimText;
-                }
-                showText(fullText);
-                finalResult = '';
-            } else if (finalText) {
-                finalResult = finalText;
-                fullText = '';
-                showText(finalResult);
-                setStatus('✅ تم التعرف على: "' + finalResult + '"');
-            }
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)({
+                sampleRate: 48000,
+                latencyHint: 'interactive'
+            });
+
+            // ⭐ 1. عقدة التضخيم (Gain Node) - تزيد الإشارة
+            gainNode = audioCtx.createGain();
+            gainNode.gain.value = 2.5; // مضاعفة الصوت
+
+            // ⭐ 2. عقدة الضغط (Compressor) - توازن مستويات الصوت
+            compressor = audioCtx.createDynamicsCompressor();
+            compressor.threshold.value = -30;    // عتبة الضغط
+            compressor.knee.value = 20;          // نعومة الضغط
+            compressor.ratio.value = 3;           // نسبة الضغط
+            compressor.attack.value = 0.003;      // سرعة الاستجابة
+            compressor.release.value = 0.25;      // سرعة التحرر
+
+            // ⭐ 3. مرشح الترددات (Biquad Filter) - يزيل الضوضاء المنخفضة
+            filterNode = audioCtx.createBiquadFilter();
+            filterNode.type = 'highpass';         // مرشح تمرير عالي
+            filterNode.frequency.value = 80;      // يزيل الترددات تحت 80 هيرتز
+            filterNode.Q.value = 1;
+
+            // ⭐ 4. عقدة التحليل
+            analyser = audioCtx.createAnalyser();
+            analyser.fftSize = 1024;              // دقة عالية
+            analyser.smoothingTimeConstant = 0.7;
+            analyser.minDecibels = -90;
+            analyser.maxDecibels = -10;
+
+            // ⭐ سلسلة التوصيل: مصدر → مرشح → تضخيم → ضغط → تحليل
+            const source = audioCtx.createMediaStreamSource(stream);
+            source.connect(filterNode);
+            filterNode.connect(gainNode);
+            gainNode.connect(compressor);
+            compressor.connect(analyser);
+
+            // ⭐ بدء التحديث
+            updateVolume();
+            setStatus('🎤 جاهز - تحدث الآن', 'success');
+        } catch (e) {
+            showError('لا يمكن قياس الصوت: ' + e.message);
         }
+    }
 
-        function onError(event) {
-            const errors = {
-                'not-allowed': 'تم رفض إذن الميكروفون',
-                'no-speech': 'لم يتم سماع صوت - حاول التحدث بصوت أعلى',
-                'audio-capture': 'مشكلة في الميكروفون',
-                'network': 'مشكلة في الإنترنت',
-                'aborted': 'تم الإيقاف'
-            };
-            const msg = errors[event.error] || 'خطأ: ' + event.error;
-            showError(msg);
-            setStatus('❌ ' + msg);
-
-            if (['not-allowed', 'audio-capture'].includes(event.error)) {
-                if (isListening) {
-                    try { recognizer.stop(); } catch (e) {}
-                }
-            }
+    function stopVolumeMonitor() {
+        if (stream) {
+            stream.getTracks().forEach(t => t.stop());
+            stream = null;
         }
-
-        // ============================================================
-        // 6. دوال قياس الصوت (محسنة للحساسية)
-        // ============================================================
-        async function startVolumeMonitor() {
-            try {
-                // ⭐ تحسين إعدادات الميكروفون للحساسية العالية
-                stream = await navigator.mediaDevices.getUserMedia({
-                    audio: {
-                        echoCancellation: true,      // تقليل الصدى
-                        noiseSuppression: false,     // ⭐ إيقاف تقليل الضوضاء (يحسن الحساسية)
-                        autoGainControl: true,       // ⭐ تفعيل التحكم التلقائي بالكسب (مهم جداً)
-                        sampleRate: 48000,           // جودة عالية
-                        channelCount: 1              // أحادي
-                    }
-                });
-
-                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                
-                // ⭐ إضافة عقدة تضخيم الصوت (Gain Node)
-                gainNode = audioCtx.createGain();
-                gainNode.gain.value = 2.0; // ⭐ مضاعفة الصوت (زيادة الحساسية)
-
-                analyser = audioCtx.createAnalyser();
-                analyser.fftSize = 512;  // ⭐ زيادة الدقة
-                analyser.smoothingTimeConstant = 0.8;
-
-                const source = audioCtx.createMediaStreamSource(stream);
-                
-                // ⭐ توصيل: مصدر ← تضخيم ← تحليل
-                source.connect(gainNode);
-                gainNode.connect(analyser);
-
-                // ⭐ تغيير عتبة الصوت للكشف عن الأصوات المنخفضة
-                updateVolume();
-            } catch (e) {
-                showError('لا يمكن قياس الصوت: ' + e.message);
-            }
+        if (audioCtx && audioCtx.state !== 'closed') {
+            audioCtx.close();
+            audioCtx = null;
         }
-
-        function stopVolumeMonitor() {
-            if (stream) {
-                stream.getTracks().forEach(t => t.stop());
-                stream = null;
-            }
-            if (audioCtx && audioCtx.state !== 'closed') {
-                audioCtx.close();
-                audioCtx = null;
-            }
-            gainNode = null;
-            volumeLevel = 0;
-            showVolume(0);
-        }
-
-        function updateVolume() {
-            if (!analyser || !isListening) {
-                return;
-            }
-
-            try {
-                const data = new Uint8Array(analyser.frequencyBinCount);
-                analyser.getByteFrequencyData(data);
-
-                let sum = 0;
-                for (let i = 0; i < data.length; i++) {
-                    sum += data[i];
-                }
-                const avg = sum / data.length;
-                
-                // ⭐ معادلة محسنة للحساسية (تعطي قراءات أعلى للصوت المنخفض)
-                let level = Math.min(10, Math.floor((avg / 15) * 1.8));
-                level = Math.max(0, Math.min(10, level));
-
-                volumeLevel = level;
-                showVolume(level);
-
-                // ⭐ عرض رسالة تنبيه إذا كان الصوت ضعيفاً
-                if (isListening && level < 2) {
-                    setStatus('🔇 صوت ضعيف - قرب الميكروفون أو تحدث بصوت أعلى');
-                } else if (isListening && level >= 2 && level < 4) {
-                    setStatus('🔊 صوت مقبول - استمر');
-                } else if (isListening && level >= 4) {
-                    setStatus('🔊 صوت جيد - واضح');
-                }
-
-                requestAnimationFrame(updateVolume);
-            } catch (e) {
-                showError('خطأ في قياس الصوت: ' + e.message);
-            }
-        }
-
-        // ============================================================
-        // 7. دوال الوصول
-        // ============================================================
-        function getVolumeLevel() { return volumeLevel; }
-        function getFinalText() { return finalResult; }
-        function getCurrentDisplayText() { return divText.textContent; }
-
-        // ============================================================
-        // 8. ربط الأحداث
-        // ============================================================
-        btnMic.addEventListener('click', toggleListening);
-
-        // ============================================================
-        // 9. بداية التشغيل
-        // ============================================================
-        setStatus('✅ جاهز - اضغط على زر التسجيل');
+        gainNode = null;
+        compressor = null;
+        filterNode = null;
+        volumeLevel = 0;
         showVolume(0);
-    </script>
+        statDuration.textContent = '0s';
+    }
+
+    function updateVolume() {
+        if (!analyser || !isListening) {
+            return;
+        }
+
+        try {
+            const data = new Uint8Array(analyser.frequencyBinCount);
+            analyser.getByteFrequencyData(data);
+
+            // ⭐ حساب متوسط الشدة مع وزن للترددات المتوسطة (الكلام)
+            let sum = 0;
+            let weightedSum = 0;
+            for (let i = 0; i < data.length; i++) {
+                // وزن أكبر للترددات المتوسطة (من 300Hz إلى 3000Hz)
+                const freq = (i / data.length) * (audioCtx.sampleRate / 2);
+                const weight = (freq > 200 && freq < 3000) ? 1.5 : 0.8;
+                weightedSum += data[i] * weight;
+                sum += data[i];
+            }
+            
+            // ⭐ معادلة محسنة جداً للحساسية
+            const avg = weightedSum / data.length;
+            let level = Math.min(10, Math.floor((avg / 12) * 2.0));
+            level = Math.max(0, Math.min(10, level));
+
+            // ⭐ تنعيم القيمة (لتجنب التقلبات المفاجئة)
+            volumeLevel = Math.round((volumeLevel * 0.3) + (level * 0.7));
+
+            // ⭐ تسجيل التاريخ
+            volumeHistory.push(volumeLevel);
+            if (volumeHistory.length > 100) volumeHistory.shift();
+
+            // ⭐ حساب متوسط الديسيبل
+            const avgDb = volumeHistory.reduce((a, b) => a + b, 0) / volumeHistory.length;
+
+            showVolume(volumeLevel);
+
+            // ⭐ تحديث المدة
+            const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+            statDuration.textContent = duration + 's';
+
+            // ⭐ رسائل حالة ذكية
+            if (isListening) {
+                if (volumeLevel < 2) {
+                    setStatus('🔇 صوت ضعيف جداً - قرب الميكروفون', 'warning');
+                } else if (volumeLevel < 4) {
+                    setStatus('🔈 صوت منخفض - تحدث بوضوح', 'warning');
+                } else if (volumeLevel < 6) {
+                    setStatus('🔉 صوت جيد - استمر', 'info');
+                } else if (volumeLevel < 8) {
+                    setStatus('🔊 صوت عالي - ممتاز', 'success');
+                } else {
+                    setStatus('📢 صوت مرتفع جداً - ابتعد قليلاً', 'info');
+                }
+            }
+
+            requestAnimationFrame(updateVolume);
+        } catch (e) {
+            showError('خطأ في قياس الصوت: ' + e.message);
+        }
+    }
+
+    // ============================================================
+    // 7. دوال الوصول
+    // ============================================================
+    function getVolumeLevel() { return volumeLevel; }
+    function getFinalText() { return finalResult; }
+    function getCurrentDisplayText() { return divText.textContent; }
+    function getAverageVolume() {
+        if (volumeHistory.length === 0) return 0;
+        return volumeHistory.reduce((a, b) => a + b, 0) / volumeHistory.length;
+    }
+
+    // ============================================================
+    // 8. ربط الأحداث
+    // ============================================================
+    btnMic.addEventListener('click', toggleListening);
+
+    // ============================================================
+    // 9. بداية التشغيل
+    // ============================================================
+    setStatus('✅ جاهز - اضغط على زر التسجيل', 'success');
+    showVolume(0);
+</script>
 </body>
 </html>
