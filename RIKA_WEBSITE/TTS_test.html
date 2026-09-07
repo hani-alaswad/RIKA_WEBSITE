@@ -128,6 +128,7 @@
             color: #2c3e50;
             font-size: 15px;
             border: 1px solid #e0e0e0;
+            word-wrap: break-word;
         }
         #status.error {
             background: #fde8e8;
@@ -144,13 +145,36 @@
             border-color: #ffc107;
             color: #856404;
         }
+        #status.info {
+            background: #d1ecf1;
+            border-color: #bee5eb;
+            color: #0c5460;
+        }
+        .voice-select {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            font-size: 16px;
+            font-family: inherit;
+            background: white;
+            margin-top: 10px;
+            direction: ltr;
+        }
+        .voice-select:focus {
+            outline: none;
+            border-color: #3498db;
+        }
+        .voice-select option {
+            direction: ltr;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🔊 = قارئ النص </h1>
+        <h1>🔊 قارئ النص</h1>
         
-        <textarea id="textInput" placeholder="اكتب النص هنا...">مرحباً، هذا اختبار لخاصية تحويل النص إلى كلام.</textarea>
+        <textarea id="textInput" placeholder="اكتب النص هنا...">مرحباً، هذا اختبار لخاصية تحويل النص إلى كلام باللغة العربية.</textarea>
         
         <div class="controls">
             <div class="control-group">
@@ -167,6 +191,15 @@
                     <span class="value" id="pitchValue">1.0</span>
                 </label>
                 <input type="range" id="pitchSlider" min="0.5" max="2" step="0.1" value="1.0">
+            </div>
+
+            <div class="control-group">
+                <label>
+                    <span>اختر الصوت</span>
+                </label>
+                <select class="voice-select" id="voiceSelect">
+                    <option value="">جاري تحميل الأصوات...</option>
+                </select>
             </div>
         </div>
         
@@ -186,9 +219,12 @@
             const speedValue = document.getElementById('speedValue');
             const pitchValue = document.getElementById('pitchValue');
             const readBtn = document.getElementById('readBtn');
+            const voiceSelect = document.getElementById('voiceSelect');
 
-            let currentUtterance = null;
+            let voices = [];
             let isSpeaking = false;
+            let currentUtterance = null;
+            let isPaused = false;
 
             // تحديث القيم المعروضة للمنزلقتين
             speedSlider.addEventListener('input', function() {
@@ -211,6 +247,7 @@
                 readBtn.classList.remove('stopped');
                 readBtn.disabled = false;
                 isSpeaking = false;
+                isPaused = false;
                 currentUtterance = null;
             }
 
@@ -220,7 +257,68 @@
                 readBtn.classList.add('stopped');
                 readBtn.disabled = false;
                 isSpeaking = true;
+                isPaused = false;
             }
+
+            // دالة تحميل الأصوات
+            function loadVoices() {
+                try {
+                    voices = window.speechSynthesis.getVoices();
+                    
+                    // تصفية الأصوات العربية أولاً
+                    const arabicVoices = voices.filter(v => v.lang.startsWith('ar'));
+                    const otherVoices = voices.filter(v => !v.lang.startsWith('ar'));
+                    
+                    // ترتيب الأصوات: العربية أولاً ثم الباقي
+                    const sortedVoices = [...arabicVoices, ...otherVoices];
+                    
+                    if (sortedVoices.length === 0) {
+                        voiceSelect.innerHTML = '<option value="">لا توجد أصوات متاحة</option>';
+                        setStatus('⚠️ لا توجد أصوات متاحة في جهازك', 'warning');
+                        return;
+                    }
+
+                    voiceSelect.innerHTML = '';
+                    let hasArabic = false;
+                    
+                    sortedVoices.forEach((voice, index) => {
+                        const option = document.createElement('option');
+                        option.value = index;
+                        const langName = voice.lang || 'unknown';
+                        const voiceName = voice.name || 'Unnamed';
+                        option.textContent = `${voiceName} (${langName})`;
+                        
+                        // اختيار أول صوت عربي تلقائياً
+                        if (voice.lang.startsWith('ar') && !hasArabic) {
+                            option.selected = true;
+                            hasArabic = true;
+                        }
+                        
+                        voiceSelect.appendChild(option);
+                    });
+
+                    // إذا لم يتم العثور على صوت عربي، اختر الأول
+                    if (!hasArabic && sortedVoices.length > 0) {
+                        voiceSelect.options[0].selected = true;
+                        setStatus('⚠️ لم يتم العثور على صوت عربي، سيتم استخدام الصوت الافتراضي', 'warning');
+                    } else if (hasArabic) {
+                        setStatus('✅ تم تحميل الأصوات العربية بنجاح', 'success');
+                    }
+                } catch (e) {
+                    console.error('خطأ في تحميل الأصوات:', e);
+                }
+            }
+
+            // تحميل الأصوات عند تغييرها (مهم لكروم)
+            if (window.speechSynthesis.onvoiceschanged !== undefined) {
+                window.speechSynthesis.onvoiceschanged = loadVoices;
+            }
+
+            // محاولة تحميل الأصوات فوراً
+            setTimeout(loadVoices, 100);
+
+            // محاولة إضافية بعد ثانية
+            setTimeout(loadVoices, 1000);
 
             // التحقق من دعم التطبيق
             if (!('speechSynthesis' in window)) {
@@ -228,26 +326,6 @@
                 readBtn.disabled = true;
                 return;
             }
-
-            // التحقق من توفر الأصوات العربية (قد تكون غير مثبتة)
-            function checkArabicVoice() {
-                const voices = window.speechSynthesis.getVoices();
-                const arabicVoice = voices.find(v => v.lang.startsWith('ar'));
-                if (!arabicVoice) {
-                    setStatus('⚠️ قد لا تتوفر أصوات عربية في هذا الجهاز. سيتم استخدام الصوت الافتراضي.', 'warning');
-                }
-            }
-
-            // محاولة تحميل الأصوات (قد تحتاج لبعض الوقت في كروم)
-            if (window.speechSynthesis.getVoices().length === 0) {
-                window.speechSynthesis.onvoiceschanged = function() {
-                    checkArabicVoice();
-                };
-            } else {
-                checkArabicVoice();
-            }
-
-            setStatus('✅ التطبيق جاهز، اختر نصاً واضغط اقرأ', 'success');
 
             // دالة قراءة النص
             function speakText() {
@@ -259,9 +337,13 @@
                     return;
                 }
 
-                // إلغاء أي قراءة سابقة
-                if (window.speechSynthesis.speaking) {
-                    window.speechSynthesis.cancel();
+                // إلغاء أي قراءة سابقة بأمان
+                try {
+                    if (window.speechSynthesis.speaking || isSpeaking) {
+                        window.speechSynthesis.cancel();
+                    }
+                } catch (e) {
+                    // تجاهل
                 }
 
                 // إنشاء كائن الكلام
@@ -271,15 +353,20 @@
                 utterance.pitch = parseFloat(pitchSlider.value);
                 utterance.volume = 1;
 
-                // محاولة تعيين صوت عربي إذا وجد
+                // تعيين الصوت المختار
                 try {
-                    const voices = window.speechSynthesis.getVoices();
-                    const arabicVoice = voices.find(v => v.lang.startsWith('ar'));
-                    if (arabicVoice) {
-                        utterance.voice = arabicVoice;
+                    const selectedIndex = parseInt(voiceSelect.value);
+                    if (!isNaN(selectedIndex) && voices[selectedIndex]) {
+                        utterance.voice = voices[selectedIndex];
+                    } else {
+                        // محاولة العثور على صوت عربي تلقائياً
+                        const arabicVoice = voices.find(v => v.lang.startsWith('ar'));
+                        if (arabicVoice) {
+                            utterance.voice = arabicVoice;
+                        }
                     }
                 } catch (e) {
-                    // تجاهل خطأ تعيين الصوت
+                    // تجاهل
                 }
 
                 currentUtterance = utterance;
@@ -296,9 +383,16 @@
                 };
 
                 utterance.onerror = function(event) {
-                    // تجاهل خطأ interrupted إذا تم الإيقاف عمداً
-                    if (event.error === 'interrupted') {
+                    // تجاهل أخطاء الإيقاف المتعمد
+                    if (event.error === 'interrupted' || event.error === 'canceled') {
                         setStatus('⏹️ تم إيقاف القراءة', 'info');
+                        resetButton();
+                        return;
+                    }
+
+                    // أخطاء خاصة بالأندرويد
+                    if (event.error === 'synthesis-failed' || event.error === 'audio-busy') {
+                        setStatus('⚠️ فشل التشغيل. حاول مرة أخرى أو اختر صوتاً مختلفاً', 'warning');
                         resetButton();
                         return;
                     }
@@ -310,9 +404,6 @@
                             break;
                         case 'synthesis-unavailable':
                             errorMsg += 'خدمة الترجمة الصوتية غير متوفرة حالياً';
-                            break;
-                        case 'synthesis-failed':
-                            errorMsg += 'فشل تحويل النص إلى كلام';
                             break;
                         default:
                             errorMsg += event.error;
@@ -330,54 +421,85 @@
                 }
             }
 
-            // دالة إيقاف القراءة
+            // دالة إيقاف القراءة الآمنة
             function stopSpeaking() {
-                if (window.speechSynthesis.speaking) {
-                    window.speechSynthesis.cancel();
+                try {
+                    if (window.speechSynthesis.speaking) {
+                        window.speechSynthesis.cancel();
+                    }
+                } catch (e) {
+                    // تجاهل
                 }
                 setStatus('⏹️ تم الإيقاف', 'info');
                 resetButton();
             }
 
-            // معالج واحد فقط للزر
-            readBtn.addEventListener('click', function() {
-                // منع النقر المتعدد السريع
+            // معالج واحد للزر
+            readBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                
                 if (readBtn.disabled) return;
 
-                // إذا كان الزر في حالة إيقاف، أوقف القراءة
+                // إذا كان في حالة إيقاف
                 if (isSpeaking) {
                     stopSpeaking();
                     return;
                 }
 
-                // وإلا اقرأ النص
+                // وإلا اقرأ
                 speakText();
             });
 
+            // إعادة تحميل الأصوات عند النقر على زر الصوت
+            voiceSelect.addEventListener('focus', function() {
+                loadVoices();
+            });
+
+            // معالجة مشكلة الخروج من المتصفح على الأندرويد
+            // منع الأحداث التي قد تسبب الخروج
+            document.addEventListener('touchstart', function(e) {
+                // منع انتشار الأحداث غير المرغوب فيها
+            }, { passive: true });
+
             // إعادة تعيين الحالة عند فقدان التركيز
             window.addEventListener('beforeunload', function() {
-                if (window.speechSynthesis.speaking) {
-                    window.speechSynthesis.cancel();
-                }
+                try {
+                    if (window.speechSynthesis.speaking) {
+                        window.speechSynthesis.cancel();
+                    }
+                } catch (e) {}
             });
 
-            // معالجة حالة فقدان الصوت في الخلفية (مهم للأندرويد)
+            // معالجة حالة الخلفية للأندرويد
             document.addEventListener('visibilitychange', function() {
-                if (document.hidden && window.speechSynthesis.speaking) {
-                    // في بعض الأحيان يتوقف الصوت تلقائياً عند الخلفية
-                    // نتحقق بعد العودة إذا كان لا يزال يتحدث
+                if (document.hidden) {
+                    // في الخلفية - لا تفعل شيئاً
+                } else {
+                    // العودة إلى التطبيق - تحقق من حالة الصوت
+                    setTimeout(function() {
+                        if (isSpeaking && !window.speechSynthesis.speaking) {
+                            resetButton();
+                            setStatus('⏹️ توقفت القراءة تلقائياً', 'info');
+                        }
+                    }, 500);
                 }
             });
 
-            // التحقق الدوري من حالة الكلام (لتصحيح حالة الزر)
-            setInterval(function() {
-                if (isSpeaking && !window.speechSynthesis.speaking && currentUtterance) {
-                    // إذا كان الكلام قد توقف بدون حدث onend (مشكلة في بعض المتصفحات)
-                    resetButton();
-                    setStatus('⏹️ توقفت القراءة', 'info');
-                }
-            }, 5000);
+            // معالجة خاصة لأندرويد 11: استخدام مستمع للصوت
+            // لتجنب مشكلة الخروج من المتصفح
+            if (/Android/i.test(navigator.userAgent)) {
+                // إضافة معالج خاص للأندرويد
+                document.addEventListener('click', function(e) {
+                    // منع أي إجراء قد يغلق المتصفح
+                }, { passive: true });
+                
+                // منع التمرير الذي قد يسبب مشاكل
+                document.addEventListener('touchmove', function(e) {
+                    // لا تفعل شيئاً
+                }, { passive: true });
+            }
 
+            console.log('✅ قارئ النص جاهز للعمل');
         })();
     </script>
 </body>
