@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>التعرف على الصوت الذكي</title>
+    <title>التعرف على الصوت الذكي 1</title>
     <style>
-        /* ====== RESET & BASE ====== */
         * {
             margin: 0;
             padding: 0;
@@ -37,7 +36,6 @@
             text-align: center;
             font-weight: 300;
             font-size: 26px;
-            letter-spacing: 0.5px;
             color: #f0f6fc;
             margin-bottom: 28px;
         }
@@ -45,7 +43,6 @@
             color: #58a6ff;
         }
 
-        /* ====== CONTROLS ====== */
         .controls {
             display: flex;
             flex-wrap: wrap;
@@ -95,7 +92,6 @@
             user-select: none;
         }
 
-        /* ====== BUTTONS ====== */
         .action-btn {
             background: #238636;
             border: none;
@@ -125,7 +121,6 @@
             text-align: center;
         }
 
-        /* ====== TEXT BOX ====== */
         .text-box {
             background: #0d1117;
             border-radius: 16px;
@@ -150,7 +145,6 @@
             font-size: 18px;
         }
 
-        /* ====== SENTENCE COUNTER ====== */
         .sentence-counter {
             font-size: 14px;
             color: #8b949e;
@@ -159,7 +153,6 @@
             font-family: monospace;
         }
 
-        /* ====== VOLUME INDICATOR ====== */
         .volume-section {
             background: #0d1117;
             border-radius: 14px;
@@ -206,23 +199,22 @@
 
         /* ====== SLIDER ====== */
         .slider-section {
+            margin: 12px 0 18px;
+            padding: 12px 14px;
             background: #0d1117;
             border-radius: 14px;
-            padding: 16px 14px 20px;
             border: 1px solid #30363d;
-            margin-bottom: 18px;
         }
         .slider-header {
             display: flex;
             justify-content: space-between;
-            align-items: center;
             font-size: 14px;
             color: #8b949e;
-            margin-bottom: 8px;
+            margin-bottom: 6px;
         }
         .slider-header span:last-child {
             color: #f0f6fc;
-            font-weight: bold;
+            font-weight: 600;
         }
         input[type="range"] {
             width: 100%;
@@ -231,6 +223,7 @@
             background: #30363d;
             border-radius: 10px;
             outline: none;
+            transition: 0.2s;
         }
         input[type="range"]::-webkit-slider-thumb {
             -webkit-appearance: none;
@@ -239,7 +232,8 @@
             border-radius: 50%;
             background: #58a6ff;
             cursor: pointer;
-            border: 2px solid #161b22;
+            border: 2px solid #0d1117;
+            box-shadow: 0 0 10px #58a6ff66;
         }
         input[type="range"]::-moz-range-thumb {
             width: 18px;
@@ -247,10 +241,9 @@
             border-radius: 50%;
             background: #58a6ff;
             cursor: pointer;
-            border: 2px solid #161b22;
+            border: 2px solid #0d1117;
         }
 
-        /* ====== INDICATORS ====== */
         .indicators {
             display: flex;
             align-items: center;
@@ -291,16 +284,33 @@
             background: #484f58;
         }
         @keyframes blink-red {
-            0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.25; transform: scale(0.85); }
+            0%,
+            100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+            50% {
+                opacity: 0.25;
+                transform: scale(0.85);
+            }
         }
         @keyframes blink-green-once {
-            0% { opacity: 1; transform: scale(1.2); box-shadow: 0 0 30px #2ea043cc; }
-            70% { opacity: 1; transform: scale(1); }
-            100% { opacity: 0.3; transform: scale(0.9); box-shadow: 0 0 0 #2ea04300; }
+            0% {
+                opacity: 1;
+                transform: scale(1.2);
+                box-shadow: 0 0 30px #2ea043cc;
+            }
+            70% {
+                opacity: 1;
+                transform: scale(1);
+            }
+            100% {
+                opacity: 0.3;
+                transform: scale(0.9);
+                box-shadow: 0 0 0 #2ea04300;
+            }
         }
 
-        /* ====== STATUS ====== */
         .status-area {
             background: #0d1117;
             border-radius: 12px;
@@ -324,21 +334,30 @@
             font-size: 13px;
         }
 
-        /* ====== RESPONSIVE ====== */
         @media (max-width: 500px) {
-            .app-container { padding: 18px 14px 28px; }
-            .text-box { font-size: 20px; min-height: 80px; padding: 16px; }
-            .controls { gap: 12px 16px; }
-            .indicators { gap: 20px; flex-wrap: wrap; }
-            .volume-bar-bg { height: 16px; }
+            .app-container {
+                padding: 18px 14px 28px;
+            }
+            .text-box {
+                font-size: 20px;
+                min-height: 80px;
+                padding: 16px;
+            }
+            .controls {
+                gap: 12px 16px;
+            }
+            .indicators {
+                gap: 20px;
+                flex-wrap: wrap;
+            }
+            .volume-bar-bg {
+                height: 16px;
+            }
         }
     </style>
 </head>
 <body>
 
-    <!-- ============================================================ -->
-    <!-- HTML STRUCTURE                                               -->
-    <!-- ============================================================ -->
     <div class="app-container" id="appRoot">
 
         <div class="app-title">🎙️ <span>تعرف</span> الصوت الذكي</div>
@@ -368,30 +387,26 @@
         <!-- SENTENCE COUNTER -->
         <div class="sentence-counter" id="sentenceCounter">الجمل المستلمة: 0</div>
 
-        <!-- SLIDER: عتبة الضجيج -->
-        <div class="slider-section">
-            <div class="slider-header">
-                <span>🔊 عتبة بدء التعرف</span>
-                <span id="sliderValue">2</span>
-            </div>
-            <input type="range" id="thresholdSlider" min="1" max="8" value="2" step="0.5">
-            <div style="display:flex;justify-content:space-between;font-size:12px;color:#484f58;margin-top:4px;">
-                <span>حساس عالي (1)</span>
-                <span>متوسط (4)</span>
-                <span>منخفض الحساسية (8)</span>
-            </div>
-        </div>
-
         <!-- VOLUME INDICATOR -->
         <div class="volume-section">
             <div class="volume-header">
-                <span>📊 مستوى الصوت (مضاعف ×2)</span>
+                <span>📊 مستوى الصوت (مضاعف)</span>
                 <span class="volume-status-msg" id="volumeStatusMsg"></span>
             </div>
             <div class="volume-bar-bg">
                 <div class="volume-bar-fill" id="volumeBarFill"></div>
             </div>
             <div class="volume-level-text" id="volumeLevelText">المستوى: 0 / 10</div>
+        </div>
+
+        <!-- SLIDER: عتبة التشغيل -->
+        <div class="slider-section">
+            <div class="slider-header">
+                <span>🔊 عتبة تشغيل الاستماع</span>
+                <span id="thresholdDisplay">5</span>
+            </div>
+            <input type="range" id="thresholdSlider" min="1" max="10" value="5" step="0.5">
+            <div style="font-size:12px;color:#484f58;margin-top:4px;">عند تجاوز هذه القيمة + تردد مناسب → يبدأ التعرف</div>
         </div>
 
         <!-- INDICATORS -->
@@ -414,9 +429,6 @@
 
     </div>
 
-    <!-- ============================================================ -->
-    <!-- JAVASCRIPT                                                   -->
-    <!-- ============================================================ -->
     <script>
         (function() {
             'use strict';
@@ -440,7 +452,7 @@
             const startBtn = document.getElementById('startBtn');
             const startBtnWrap = document.getElementById('startBtnWrap');
             const thresholdSlider = document.getElementById('thresholdSlider');
-            const sliderValue = document.getElementById('sliderValue');
+            const thresholdDisplay = document.getElementById('thresholdDisplay');
 
             // ================================================================
             // 2. STATE VARIABLES
@@ -454,13 +466,12 @@
             let mediaStream = null;
             let audioContext = null;
             let analyser = null;
+            let dataArray = null;
             let monitorTimer = null;
             let recognizer = null;
 
-            // النصوص - مهم جداً: عدم التكرار
-            let interimText = '';       // النص المؤقت (يظهر أثناء الكلام)
-            let finalSentence = '';     // الجملة النهائية الحالية
-            let lastFinalText = '';     // لمنع التكرار
+            let currentInterim = '';
+            let currentSentence = '';
             let sentenceHistory = [];
             let sentenceCount = 0;
 
@@ -469,23 +480,24 @@
             let greenBlinkTimer = null;
 
             // المعايير
+            let VOLUME_THRESHOLD = 5; // القيمة الافتراضية (تتغير من السلايدر)
             const SILENCE_DURATION_MS = 15000;
             const SENTENCE_GAP_MS = 3000;
-            const MONITOR_INTERVAL_MS = 150;
+            const MONITOR_INTERVAL_MS = 200;
             const MONITOR_INTERVAL_OFF_MS = 500;
             const SPEECH_FREQ_MIN = 200;
             const SPEECH_FREQ_MAX = 3000;
 
-            let currentVolume = 0;
-            let threshold = 2; // القيمة الافتراضية
+            let currentVolume = 0; // 0-10 (مضاعف)
+            let isSpeechDetected = false;
 
             // ================================================================
             // 3. UI UPDATE FUNCTIONS
             // ================================================================
             function updateTextDisplay() {
-                let display = finalSentence;
-                if (interimText) {
-                    display = display ? display + ' ' + interimText : interimText;
+                let display = currentSentence;
+                if (currentInterim) {
+                    display = display ? display + ' ' + currentInterim : currentInterim;
                 }
                 textBox.textContent = display || '';
                 textBox.classList.toggle('listening', isListening);
@@ -505,6 +517,7 @@
             }
 
             function updateVolumeDisplay(level) {
+                // مستوى مضاعف: القيم من 0-10 ولكن الحساسية مضاعفة
                 const percent = Math.min(100, (level / 10) * 100);
                 volumeBarFill.style.width = percent + '%';
                 volumeLevelText.textContent = 'المستوى: ' + Math.round(level) + ' / 10';
@@ -539,22 +552,15 @@
                 continuousSwitchLabel.textContent = isContinuous ? 'مفعل' : 'إيقاف';
             }
 
-            function clearTextBox() {
-                interimText = '';
-                finalSentence = '';
-                lastFinalText = '';
-                sentenceHistory = [];
-                sentenceCount = 0;
-                updateTextDisplay();
-                updateSentenceCounter();
-                setDotGreen('off');
+            function updateThresholdDisplay() {
+                thresholdDisplay.textContent = VOLUME_THRESHOLD;
             }
 
             // ================================================================
-            // 4. VOLUME & FREQUENCY ANALYSIS (مضاعفة ×2)
+            // 4. VOLUME & FREQUENCY ANALYSIS (مضاعف)
             // ================================================================
             function getVolumeAndFreq() {
-                if (!analyser) return { volume: 0, isSpeech: false, rawVolume: 0 };
+                if (!analyser) return { volume: 0, isSpeech: false };
                 try {
                     const bufferLength = analyser.frequencyBinCount;
                     const data = new Uint8Array(bufferLength);
@@ -578,17 +584,15 @@
                     const avg = sum / bufferLength;
                     const speechAvg = speechCount > 0 ? speechSum / speechCount : 0;
 
-                    // مضاعفة الحساسية ×2
-                    let rawLevel = Math.min(10, Math.floor((avg / 12) * 2.0));
-                    rawLevel = Math.max(0, Math.min(10, rawLevel));
-                    let level = Math.min(10, rawLevel * 2);
+                    // مستوى مضاعف (×2) لجعل الحساسية أعلى
+                    let level = Math.min(10, Math.floor((avg / 6) * 1.8));
                     level = Math.max(0, Math.min(10, level));
 
-                    const isSpeech = (speechAvg > 8 && level > threshold);
+                    const isSpeech = (speechAvg > 8 && level > 1);
 
-                    return { volume: level, rawVolume: rawLevel, isSpeech: isSpeech };
+                    return { volume: level, isSpeech: isSpeech };
                 } catch (e) {
-                    return { volume: 0, isSpeech: false, rawVolume: 0 };
+                    return { volume: 0, isSpeech: false };
                 }
             }
 
@@ -643,30 +647,39 @@
                     return;
                 }
 
-                // ---- الوضع الذكي مع العتبة من المنزلقة ----
-                const isLoud = currentVolume > threshold;
+                // ---- الوضع الذكي ----
+                const isLoud = currentVolume > VOLUME_THRESHOLD;
 
                 if (isLoud && isSpeechFreq) {
-                    updateVolumeStatus('✅ تردد مناسب للكلام');
+                    // ✅ صوت عالٍ + تردد مناسب → تشغيل الاستماع
+                    updateVolumeStatus('✅ تردد مناسب - بدء الاستماع');
                     if (!isListening) {
+                        // حذف النص القديم عند بدء جملة جديدة
+                        if (currentSentence || currentInterim) {
+                            currentSentence = '';
+                            currentInterim = '';
+                            updateTextDisplay();
+                        }
                         startRecognition();
                     }
                     resetSilenceTimer();
                 } else if (isLoud && !isSpeechFreq) {
-                    updateVolumeStatus('⚠️ تردد ضجيج وليس كلام');
+                    // ❌ صوت عالٍ لكن تردد غير مناسب
+                    updateVolumeStatus('⚠️ تردد غير مناسب للكلام');
                     if (isListening) {
-                        // نستمر في الاستماع ولا نوقف
+                        // نستمر في الاستماع إذا كان شغالاً
                     }
                 } else {
+                    // صوت منخفض
                     updateVolumeStatus('');
                     if (isListening) {
-                        // نستمر طالما لم يمر 15 ثانية صمت
+                        // نستمر، silenceTimer يتولى الباقي
                     }
                 }
 
-                // إيقاف التعرف إذا كان الصمت 15 ثانية والمستوى < 1
-                if (isListening && currentVolume < 1) {
-                    // silenceTimer يعمل بالفعل
+                // إيقاف التعرف إذا كان الصمت 15 ثانية والمستوى < 2
+                if (isListening && currentVolume < 2) {
+                    // silenceTimer يعمل
                 }
             }
 
@@ -680,7 +693,8 @@
                 }
                 silenceTimer = setTimeout(() => {
                     if (isListening && !isContinuous && isMainOn && hasStarted) {
-                        if (currentVolume < 1) {
+                        if (currentVolume < 2) {
+                            // إيقاف الاستماع بعد صمت
                             stopRecognition();
                             updateStatus('⏸️ توقف تلقائي (صمت 15 ثانية)', false);
                             setDotRed('idle');
@@ -701,7 +715,7 @@
                     sentenceFinalizeTimer = null;
                 }
                 sentenceFinalizeTimer = setTimeout(() => {
-                    if (isListening && interimText) {
+                    if (isListening && currentInterim) {
                         finalizeSentence();
                     }
                     sentenceFinalizeTimer = null;
@@ -709,23 +723,29 @@
             }
 
             function finalizeSentence() {
-                if (!interimText) return;
-                const finalText = interimText.trim();
-                if (finalText && finalText !== lastFinalText) {
-                    lastFinalText = finalText;
+                if (!currentInterim) return;
+                const finalText = currentInterim.trim();
+                if (finalText) {
                     sentenceHistory.push(finalText);
                     sentenceCount++;
-                    finalSentence = finalText;
-                    interimText = '';
+                    currentSentence = finalText;
+                    currentInterim = '';
                     updateTextDisplay();
                     updateSentenceCounter();
                     setDotGreen('blink');
                     updateStatus('✅ جملة مكتملة: "' + finalText + '"', false);
+
+                    // ⭐ بعد اكتمال الجملة، نوقف الاستماع ونعود للمراقبة
+                    if (!isContinuous && isMainOn) {
+                        stopRecognition();
+                        setDotRed('idle');
+                        updateStatus('⏸️ تم إيقاف الاستماع - في انتظار كلام جديد', false);
+                    }
                 }
             }
 
             // ================================================================
-            // 8. RECOGNITION - (بدون تكرار)
+            // 8. RECOGNITION
             // ================================================================
             function startRecognition() {
                 if (isListening) return;
@@ -773,37 +793,33 @@
                     };
 
                     recognizer.onresult = function(event) {
-                        let newInterim = '';
-                        let newFinal = '';
+                        let interim = '';
+                        let final = '';
 
                         for (let i = event.resultIndex; i < event.results.length; i++) {
                             const text = event.results[i][0].transcript.trim();
                             if (event.results[i].isFinal) {
-                                newFinal = text;
+                                final = text;
                             } else {
-                                newInterim = text;
+                                interim = text;
                             }
                         }
 
-                        // معالجة النص المؤقت (يظهر فوراً)
-                        if (newInterim) {
-                            // إذا كانت جملة جديدة (تم إنهاء الجملة السابقة)
-                            if (finalSentence && !interimText) {
-                                // نبدأ جملة جديدة، نمسح القديمة
-                                finalSentence = '';
+                        if (interim) {
+                            if (currentSentence && !currentInterim) {
+                                currentSentence = '';
                             }
-                            interimText = newInterim;
+                            currentInterim = interim;
                             updateTextDisplay();
                             resetSentenceTimer();
                             resetSilenceTimer();
                         }
 
-                        // معالجة النص النهائي (يضاف إلى المؤقت)
-                        if (newFinal) {
-                            if (interimText) {
-                                interimText = interimText + ' ' + newFinal;
+                        if (final) {
+                            if (currentInterim) {
+                                currentInterim = currentInterim + ' ' + final;
                             } else {
-                                interimText = newFinal;
+                                currentInterim = final;
                             }
                             updateTextDisplay();
                             resetSentenceTimer();
@@ -878,7 +894,7 @@
                     });
 
                     analyser = audioContext.createAnalyser();
-                    analyser.fftSize = 2048;
+                    analyser.fftSize = 1024;
                     analyser.smoothingTimeConstant = 0.7;
                     analyser.minDecibels = -90;
                     analyser.maxDecibels = -10;
@@ -922,11 +938,14 @@
 
                 if (!isMainOn) {
                     if (isListening) stopRecognition();
-                    clearTextBox();
                     if (monitorTimer) {
                         stopMonitoring();
                         startMonitoring();
                     }
+                    // حذف النص
+                    currentSentence = '';
+                    currentInterim = '';
+                    updateTextDisplay();
                     updateStatus('⏸️ الميزة معطلة (مراقبة فقط)', false);
                 } else {
                     if (monitorTimer) {
@@ -937,6 +956,10 @@
                     if (isContinuous && hasStarted && !isListening) {
                         startRecognition();
                     }
+                    // حذف النص عند إعادة التشغيل
+                    currentSentence = '';
+                    currentInterim = '';
+                    updateTextDisplay();
                 }
             }
 
@@ -951,7 +974,7 @@
                     updateStatus('🔁 وضع التشغيل المستمر مفعل', false);
                 } else {
                     if (isListening) stopRecognition();
-                    updateStatus('⏸️ وضع التشغيل المستمر معطل - انتظار كلام', false);
+                    updateStatus('⏸️ وضع التشغيل المستمر معطل', false);
                     if (monitorTimer) {
                         stopMonitoring();
                         startMonitoring();
@@ -960,12 +983,11 @@
             }
 
             // ================================================================
-            // 12. SLIDER
+            // 12. THRESHOLD SLIDER
             // ================================================================
             thresholdSlider.addEventListener('input', function() {
-                threshold = parseFloat(this.value);
-                sliderValue.textContent = threshold;
-                updateStatus('🔊 عتبة التعرف: ' + threshold, false);
+                VOLUME_THRESHOLD = parseFloat(this.value);
+                updateThresholdDisplay();
             });
 
             // ================================================================
@@ -975,23 +997,37 @@
             window.toggleContinuousMode = toggleContinuousMode;
             window.getCurrentState = function() {
                 return {
-                    isMainOn, isContinuous, isListening, isMonitoring, hasStarted,
-                    currentVolume, threshold,
-                    finalSentence, interimText,
-                    sentenceCount, sentenceHistory: sentenceHistory.slice()
+                    isMainOn: isMainOn,
+                    isContinuous: isContinuous,
+                    isListening: isListening,
+                    hasStarted: hasStarted,
+                    currentVolume: currentVolume,
+                    currentSentence: currentSentence,
+                    currentInterim: currentInterim,
+                    sentenceCount: sentenceCount,
+                    sentenceHistory: sentenceHistory.slice(),
+                    threshold: VOLUME_THRESHOLD
                 };
             };
             window.resetApp = function() {
                 if (isListening) stopRecognition();
                 stopMonitoring();
-                clearTextBox();
+                currentInterim = '';
+                currentSentence = '';
+                sentenceHistory = [];
+                sentenceCount = 0;
+                updateTextDisplay();
+                updateSentenceCounter();
+                setDotGreen('off');
                 hasStarted = false;
                 startBtnWrap.style.display = 'block';
                 startMonitoring();
                 updateStatus('🔄 تم إعادة التعيين - اضغط "بدء الاستماع"', false);
                 setDotRed('idle');
             };
-            window.getSentenceHistory = function() { return sentenceHistory.slice(); };
+            window.getSentenceHistory = function() {
+                return sentenceHistory.slice();
+            };
 
             // ================================================================
             // 14. EVENT BINDINGS
@@ -1015,8 +1051,8 @@
                 updateSwitches();
                 updateSentenceCounter();
                 updateTextDisplay();
+                updateThresholdDisplay();
                 startBtnWrap.style.display = 'block';
-                sliderValue.textContent = threshold;
             })();
 
             // ================================================================
@@ -1035,8 +1071,8 @@
                 }
             });
 
-        })(); // end IIFE
+        })();
     </script>
-1
+2
 </body>
 </html>
