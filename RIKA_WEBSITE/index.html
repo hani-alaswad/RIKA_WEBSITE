@@ -383,9 +383,9 @@
         <div class="slider-section">
             <div class="slider-header">
                 <span>🔊 عتبة تشغيل الاستماع</span>
-                <span id="thresholdDisplay">5</span>
+                <span id="thresholdDisplay">3</span>
             </div>
-            <input type="range" id="thresholdSlider" min="1" max="10" value="5" step="0.5">
+            <input type="range" id="thresholdSlider" min="1" max="10" value="3" step="0.5">
             <div style="font-size:12px;color:#484f58;margin-top:4px;">عند تجاوز هذه القيمة + تردد مناسب → يبدأ التعرف</div>
         </div>
 
@@ -447,14 +447,14 @@
             let monitorTimer = null;
             let recognizer = null;
 
-            // ⭐ النصوص
-            let accumulatedText = ''; // النص التراكمي
-            let finalSentence = ''; // الجملة النهائية
+            // النصوص
+            let accumulatedText = '';
+            let finalSentence = '';
             let sentenceHistory = [];
             let sentenceCount = 0;
             let isShowingFinal = false;
 
-            // ⭐ لمنع التكرار - تخزين آخر نص كامل تم استلامه
+            // لمنع التكرار - تخزين آخر نص كامل تم استلامه
             let lastFullInterim = '';
 
             let silenceTimer = null;
@@ -462,7 +462,8 @@
             let finalDisplayTimer = null;
             let greenBlinkTimer = null;
 
-            let VOLUME_THRESHOLD = 5;
+            // ⭐ القيمة الافتراضية 3
+            let VOLUME_THRESHOLD = 3;
             const SILENCE_DURATION_MS = 15000;
             const SENTENCE_GAP_MS = 3000;
             const FINAL_DISPLAY_MS = 1000;
@@ -651,6 +652,7 @@
                     return;
                 }
 
+                // ⭐ القاعدة الجديدة: التشغيل عند تجاوز العتبة (3)
                 const isLoud = currentVolume > VOLUME_THRESHOLD;
 
                 if (isLoud && isSpeechFreq) {
@@ -671,13 +673,14 @@
                     updateVolumeStatus('');
                 }
 
-                if (isListening && currentVolume < 2) {
+                // ⭐ إيقاف التشغيل فقط عندما يكون المستوى 0 أو 1 لمدة 15 ثانية
+                if (isListening && currentVolume <= 1) {
                     // silenceTimer يعمل
                 }
             }
 
             // ================================================================
-            // 6. SILENCE TIMER (15 ثانية صمت)
+            // 6. SILENCE TIMER (15 ثانية صمت - يتوقف فقط عند المستوى 0 أو 1)
             // ================================================================
             function resetSilenceTimer() {
                 if (silenceTimer) {
@@ -686,11 +689,13 @@
                 }
                 silenceTimer = setTimeout(() => {
                     if (isListening && !isContinuous && isMainOn && hasStarted) {
-                        if (currentVolume < 2) {
+                        // ⭐ فقط عندما يكون المستوى 0 أو 1
+                        if (currentVolume <= 1) {
                             stopRecognition();
-                            updateStatus('⏸️ توقف تلقائي (صمت 15 ثانية)', false);
+                            updateStatus('⏸️ توقف تلقائي (صمت 15 ثانية - مستوى 0 أو 1)', false);
                             setDotRed('idle');
                         } else {
+                            // إذا ارتفع المستوى، نعيد ضبط العداد
                             resetSilenceTimer();
                         }
                     }
@@ -730,10 +735,9 @@
                     setDotGreen('blink');
                     updateStatus('✅ جملة مكتملة: "' + finalSentence + '"', false);
 
-                    if (!isContinuous) {
-                        stopRecognition();
-                        setDotRed('idle');
-                    }
+                    // ⭐ لا نوقف الخدمة بعد الجملة، نستمر في الاستماع
+                    // فقط نعيد ضبط عداد الصمت
+                    resetSilenceTimer();
 
                     if (finalDisplayTimer) {
                         clearTimeout(finalDisplayTimer);
@@ -745,7 +749,7 @@
                         lastFullInterim = '';
                         updateTextDisplay();
                         if (!isContinuous) {
-                            updateStatus('⏸️ جاهز لجملة جديدة - تحدث', false);
+                            updateStatus('🔴 جاري الاستماع...', false);
                         }
                         finalDisplayTimer = null;
                     }, FINAL_DISPLAY_MS);
@@ -1092,34 +1096,4 @@
                     updateStatus('❌ فشل إعداد الميكروفون', true);
                     return;
                 }
-                startMonitoring();
-                updateStatus('⏸️ اضغط "بدء الاستماع" لبدء التعرف', false);
-                setDotRed('idle');
-                updateSwitches();
-                updateSentenceCounter();
-                updateTextDisplay();
-                updateThresholdDisplay();
-                startBtnWrap.style.display = 'block';
-            })();
-
-            // ================================================================
-            // 16. CLEANUP
-            // ================================================================
-            window.addEventListener('beforeunload', function() {
-                if (recognizer) {
-                    try { recognizer.abort(); } catch (e) {}
-                }
-                stopMonitoring();
-                if (mediaStream) {
-                    mediaStream.getTracks().forEach(t => t.stop());
-                }
-                if (audioContext && audioContext.state !== 'closed') {
-                    audioContext.close();
-                }
-            });
-
-        })();
-    </script>
-
-</body>
-</html>
+               
