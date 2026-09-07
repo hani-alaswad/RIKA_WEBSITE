@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>تعرف صوت - بسيط</title>
+    <title>تعرف صوت - تحديثات متتالية</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -129,9 +129,8 @@
 
         let isListening = false;
         let recognition = null;
-        let finalSentence = '';        // الجملة النهائية الكاملة
-        let interimWords = '';         // الكلمات المؤقتة (تتراكم)
-        let lastFinalText = '';        // لمنع التكرار
+        let fullText = '';           // النص الكامل المتراكم (مثل: "مرحبا ١ ٢ ٣")
+        let lastFinalText = '';      // لمنع التكرار
 
         // ----- التحقق من الدعم -----
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -162,46 +161,46 @@
 
             // ----- معالجة النتائج -----
             recognition.onresult = (event) => {
-                let interim = '';
-                let final = '';
+                let interimText = '';
+                let finalText = '';
 
                 for (let i = event.resultIndex; i < event.results.length; i++) {
                     const transcript = event.results[i][0].transcript.trim();
+                    
                     if (event.results[i].isFinal) {
-                        // نص نهائي: نضيفه إلى الجملة النهائية
+                        // النص النهائي: نضيفه إلى النص الكامل
                         if (transcript && transcript !== lastFinalText) {
-                            final += transcript + ' ';
+                            finalText = transcript;
                             lastFinalText = transcript;
                         }
                     } else {
-                        // نص مؤقت: نجمعه لعرضه فوراً
-                        interim += transcript + ' ';
+                        // النص المؤقت: نعرضه فوراً
+                        interimText = transcript;
                     }
                 }
 
-                // تحديث الجملة النهائية (تتراكم)
-                if (final) {
-                    finalSentence += final;
+                // ----- تحديث النص الكامل -----
+                // إذا كان هناك نص نهائي جديد، نضيفه إلى النص الكامل
+                if (finalText) {
+                    if (fullText) {
+                        fullText += ' ' + finalText;
+                    } else {
+                        fullText = finalText;
+                    }
                 }
 
-                // ----- العرض في حقل واحد (مثل المثال) -----
-                // نعرض الكلمات المؤقتة أولاً (تتغير فوراً)
-                // ثم نعرض الجملة النهائية في النهاية
-                let displayText = '';
-
-                // 1. الكلمات المؤقتة (تظهر فوراً)
-                if (interim.trim()) {
-                    displayText += interim.trim();
+                // ----- عرض النص في الحقل -----
+                // نعرض النص الكامل + النص المؤقت (إن وجد)
+                let displayText = fullText;
+                if (interimText) {
+                    if (displayText) {
+                        displayText += ' ' + interimText;
+                    } else {
+                        displayText = interimText;
+                    }
                 }
 
-                // 2. الجملة النهائية (تظهر بعد اكتمال الكلمات)
-                if (finalSentence.trim()) {
-                    // إذا كان هناك كلمات مؤقتة، نضيف مسافة
-                    if (displayText) displayText += ' ';
-                    displayText += finalSentence.trim();
-                }
-
-                // عرض في الحقل
+                // تحديث الحقل
                 if (displayText.trim()) {
                     textBox.textContent = displayText.trim();
                 } else {
@@ -221,8 +220,7 @@
                 debug('✅ بدأ الاستماع');
 
                 // مسح النص السابق عند بدء تسجيل جديد
-                finalSentence = '';
-                interimWords = '';
+                fullText = '';
                 lastFinalText = '';
                 textBox.textContent = '';
             };
@@ -234,12 +232,6 @@
                 micBtn.textContent = '🎤';
                 statusText.textContent = '⏸️ متوقف';
                 debug('⏹️ توقف الاستماع');
-
-                // إذا كان هناك نص مؤقت، نضيفه إلى النهائي
-                const currentText = textBox.textContent.trim();
-                if (currentText && !finalSentence.includes(currentText)) {
-                    // لكننا نريد الجملة النهائية فقط، لذا نتركها كما هي
-                }
             };
 
             // ----- الأخطاء -----
@@ -262,7 +254,7 @@
                 }
             };
 
-            // ----- أحداث إضافية للتصحيح -----
+            // ----- أحداث إضافية -----
             recognition.onsoundstart = () => {
                 statusText.textContent = '🔊 يتم سماع صوت...';
                 debug('🔊 صوت');
@@ -311,7 +303,7 @@
             }
         });
 
-        // ----- مستوى الصوت (تحليل الصوت) -----
+        // ----- مستوى الصوت -----
         let audioContext = null;
         let analyser = null;
         let dataArray = null;
@@ -408,7 +400,6 @@
         }
 
         // ----- ربط مستوى الصوت بالاستماع -----
-        // نبدأ تشغيل المستوى عند بدء الاستماع
         const originalOnStart = recognition.onstart;
         recognition.onstart = function() {
             if (originalOnStart) originalOnStart.call(this);
