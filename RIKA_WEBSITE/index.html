@@ -41,7 +41,6 @@
         .app-title span {
             color: #58a6ff;
         }
-
         .controls {
             display: flex;
             flex-wrap: wrap;
@@ -90,7 +89,6 @@
         .switch-label {
             user-select: none;
         }
-
         .action-btn {
             background: #238636;
             border: none;
@@ -109,17 +107,9 @@
             background: #2ea043;
             transform: scale(1.02);
         }
-        .action-btn.secondary {
-            background: #30363d;
-            border-color: #484f58;
-        }
-        .action-btn.secondary:hover {
-            background: #484f58;
-        }
         .btn-center {
             text-align: center;
         }
-
         .text-box {
             background: #0d1117;
             border-radius: 16px;
@@ -147,7 +137,6 @@
             color: #484f58;
             font-size: 18px;
         }
-
         .sentence-counter {
             font-size: 14px;
             color: #8b949e;
@@ -155,7 +144,6 @@
             margin: -10px 0 16px 0;
             font-family: monospace;
         }
-
         .volume-section {
             background: #0d1117;
             border-radius: 14px;
@@ -199,7 +187,6 @@
             margin-top: 6px;
             font-family: monospace;
         }
-
         .slider-section {
             margin: 12px 0 18px;
             padding: 12px 14px;
@@ -245,7 +232,6 @@
             cursor: pointer;
             border: 2px solid #0d1117;
         }
-
         .indicators {
             display: flex;
             align-items: center;
@@ -312,7 +298,6 @@
                 box-shadow: 0 0 0 #2ea04300;
             }
         }
-
         .status-area {
             background: #0d1117;
             border-radius: 12px;
@@ -335,7 +320,6 @@
             color: #f85149;
             font-size: 13px;
         }
-
         @media (max-width: 500px) {
             .app-container {
                 padding: 18px 14px 28px;
@@ -362,7 +346,7 @@
 
     <div class="app-container" id="appRoot">
 
-        <div class="app-title">🎙️ ه <span>تعرف</span> الصوت الذكي</div>
+        <div class="app-title">🎙️ <span>تعرف</span> الصوت الذكي</div>
 
         <div class="controls">
             <div class="switch-wrapper">
@@ -460,16 +444,18 @@
             let mediaStream = null;
             let audioContext = null;
             let analyser = null;
-            let dataArray = null;
             let monitorTimer = null;
             let recognizer = null;
 
-            // ⭐ المتغيرات الجديدة للنص التراكمي
-            let accumulatedText = ''; // النص التراكمي (يتراكم أثناء الكلام)
-            let finalSentence = ''; // الجملة النهائية (تعرض بعد اكتمالها)
+            // ⭐ النصوص
+            let accumulatedText = ''; // النص التراكمي
+            let finalSentence = ''; // الجملة النهائية
             let sentenceHistory = [];
             let sentenceCount = 0;
-            let isShowingFinal = false; // هل نعرض الجملة النهائية حالياً؟
+            let isShowingFinal = false;
+
+            // ⭐ لمنع التكرار - تخزين آخر نص كامل تم استلامه
+            let lastFullInterim = '';
 
             let silenceTimer = null;
             let sentenceFinalizeTimer = null;
@@ -479,7 +465,7 @@
             let VOLUME_THRESHOLD = 5;
             const SILENCE_DURATION_MS = 15000;
             const SENTENCE_GAP_MS = 3000;
-            const FINAL_DISPLAY_MS = 1000; // ثانية واحدة
+            const FINAL_DISPLAY_MS = 1000;
             const MONITOR_INTERVAL_MS = 200;
             const MONITOR_INTERVAL_OFF_MS = 500;
             const SPEECH_FREQ_MIN = 200;
@@ -491,7 +477,6 @@
             // 3. UI UPDATE FUNCTIONS
             // ================================================================
             function updateTextDisplay() {
-                // إذا كنا نعرض الجملة النهائية
                 if (isShowingFinal && finalSentence) {
                     textBox.textContent = finalSentence;
                     textBox.classList.add('final-sentence');
@@ -499,7 +484,6 @@
                     return;
                 }
 
-                // عرض النص التراكمي (أثناء الاستماع)
                 textBox.classList.remove('final-sentence');
                 if (isListening && accumulatedText) {
                     textBox.textContent = accumulatedText;
@@ -565,13 +549,11 @@
                 thresholdDisplay.textContent = VOLUME_THRESHOLD;
             }
 
-            // ================================================================
-            // 4. CLEAR TEXT (لبدء جملة جديدة)
-            // ================================================================
             function clearTextForNewSentence() {
                 accumulatedText = '';
                 finalSentence = '';
                 isShowingFinal = false;
+                lastFullInterim = '';
                 if (finalDisplayTimer) {
                     clearTimeout(finalDisplayTimer);
                     finalDisplayTimer = null;
@@ -580,7 +562,7 @@
             }
 
             // ================================================================
-            // 5. VOLUME & FREQUENCY ANALYSIS (مضاعف ×1.5)
+            // 4. VOLUME & FREQUENCY ANALYSIS (مضاعف ×1.5)
             // ================================================================
             function getVolumeAndFreq() {
                 if (!analyser) return { volume: 0, isSpeech: false };
@@ -607,7 +589,6 @@
                     const avg = sum / bufferLength;
                     const speechAvg = speechCount > 0 ? speechSum / speechCount : 0;
 
-                    // ⭐ مضاعفة ×1.5 (بدلاً من ×2)
                     let level = Math.min(10, Math.floor((avg / 8) * 1.5));
                     level = Math.max(0, Math.min(10, level));
 
@@ -620,7 +601,7 @@
             }
 
             // ================================================================
-            // 6. MONITOR LOOP
+            // 5. MONITOR LOOP
             // ================================================================
             function startMonitoring() {
                 if (monitorTimer) return;
@@ -662,29 +643,24 @@
                     return;
                 }
 
-                // ---- التشغيل المستمر ----
                 if (isContinuous) {
                     if (!isListening) {
-                        // حذف النص القديم عند بدء تشغيل مستمر
                         clearTextForNewSentence();
                         startRecognition();
                     }
                     return;
                 }
 
-                // ---- الوضع الذكي ----
                 const isLoud = currentVolume > VOLUME_THRESHOLD;
 
                 if (isLoud && isSpeechFreq) {
                     updateVolumeStatus('✅ تردد مناسب - بدء الاستماع');
 
-                    // إذا كنا نعرض جملة نهائية حالياً، نحذفها لبدء جملة جديدة
                     if (isShowingFinal) {
                         clearTextForNewSentence();
                     }
 
                     if (!isListening) {
-                        // بدء استماع جديد → نمسح النص القديم
                         clearTextForNewSentence();
                         startRecognition();
                     }
@@ -695,14 +671,13 @@
                     updateVolumeStatus('');
                 }
 
-                // إيقاف التعرف إذا كان الصمت 15 ثانية والمستوى < 2
                 if (isListening && currentVolume < 2) {
                     // silenceTimer يعمل
                 }
             }
 
             // ================================================================
-            // 7. SILENCE TIMER (15 ثانية صمت)
+            // 6. SILENCE TIMER (15 ثانية صمت)
             // ================================================================
             function resetSilenceTimer() {
                 if (silenceTimer) {
@@ -724,7 +699,7 @@
             }
 
             // ================================================================
-            // 8. SENTENCE FINALIZER (3 ثواني صمت = جملة كاملة)
+            // 7. SENTENCE FINALIZER (3 ثواني صمت = جملة كاملة)
             // ================================================================
             function resetSentenceTimer() {
                 if (sentenceFinalizeTimer) {
@@ -742,31 +717,24 @@
             function finalizeSentence() {
                 if (!accumulatedText) return;
 
-                // ⭐ 1. الجملة النهائية = النص التراكمي
                 finalSentence = accumulatedText.trim();
 
                 if (finalSentence) {
-                    // ⭐ 2. حفظ في السجل
                     sentenceHistory.push(finalSentence);
                     sentenceCount++;
                     updateSentenceCounter();
 
-                    // ⭐ 3. مسح النص التراكمي
                     accumulatedText = '';
-
-                    // ⭐ 4. عرض الجملة النهائية
                     isShowingFinal = true;
                     updateTextDisplay();
                     setDotGreen('blink');
                     updateStatus('✅ جملة مكتملة: "' + finalSentence + '"', false);
 
-                    // ⭐ 5. إيقاف الاستماع
                     if (!isContinuous) {
                         stopRecognition();
                         setDotRed('idle');
                     }
 
-                    // ⭐ 6. بعد ثانية واحدة، نمسح الجملة النهائية
                     if (finalDisplayTimer) {
                         clearTimeout(finalDisplayTimer);
                         finalDisplayTimer = null;
@@ -774,6 +742,7 @@
                     finalDisplayTimer = setTimeout(() => {
                         isShowingFinal = false;
                         finalSentence = '';
+                        lastFullInterim = '';
                         updateTextDisplay();
                         if (!isContinuous) {
                             updateStatus('⏸️ جاهز لجملة جديدة - تحدث', false);
@@ -784,7 +753,7 @@
             }
 
             // ================================================================
-            // 9. RECOGNITION
+            // 8. RECOGNITION - الحل النهائي لمشكلة التكرار
             // ================================================================
             function startRecognition() {
                 if (isListening) return;
@@ -833,6 +802,7 @@
                         }
                     };
 
+                    // ⭐⭐⭐ الحل النهائي لمشكلة التكرار ⭐⭐⭐
                     recognizer.onresult = function(event) {
                         let interim = '';
                         let final = '';
@@ -846,47 +816,65 @@
                             }
                         }
 
-                        // ⭐ معالجة النص - تراكمي بدون تكرار
-                        if (interim) {
-                            // إذا كنا نعرض جملة نهائية، نمسحها عند بدء كلام جديد
-                            if (isShowingFinal) {
-                                isShowingFinal = false;
-                                finalSentence = '';
-                            }
+                        // نختار النص الأفضل (إذا كان هناك final نستخدمه وإلا نستخدم interim)
+                        let currentText = final || interim;
 
-                            // نضيف النص المؤقت إلى التراكمي (بدون تكرار)
-                            if (accumulatedText) {
-                                // نتحقق أن النص الجديد ليس مكرراً
-                                if (!accumulatedText.includes(interim)) {
-                                    accumulatedText += ' ' + interim;
-                                }
-                            } else {
-                                accumulatedText = interim;
-                            }
-                            updateTextDisplay();
-                            resetSentenceTimer();
-                            resetSilenceTimer();
+                        if (!currentText) return;
+
+                        // إذا كنا نعرض جملة نهائية، نمسحها
+                        if (isShowingFinal) {
+                            isShowingFinal = false;
+                            finalSentence = '';
+                            lastFullInterim = '';
                         }
 
-                        if (final) {
-                            // النص النهائي (من المتصفح) نضيفه بحذر
-                            if (isShowingFinal) {
-                                isShowingFinal = false;
-                                finalSentence = '';
+                        // ⭐ استخراج الكلمات الجديدة فقط
+                        if (lastFullInterim === '') {
+                            // أول مرة: نضيف النص كاملاً
+                            accumulatedText = currentText;
+                        } else {
+                            // المقارنة: نستخرج الكلمات الجديدة فقط
+                            const oldWords = lastFullInterim.split(' ');
+                            const newWords = currentText.split(' ');
+
+                            // نبحث عن الكلمات الجديدة (التي لم تكن موجودة)
+                            let newWordsOnly = [];
+                            for (let i = 0; i < newWords.length; i++) {
+                                if (i < oldWords.length && newWords[i] === oldWords[i]) {
+                                    continue; // كلمة موجودة بالفعل
+                                } else {
+                                    // من هنا تبدأ الكلمات الجديدة
+                                    newWordsOnly = newWords.slice(i);
+                                    break;
+                                }
                             }
 
-                            // نضيف النص النهائي إذا لم يكن موجوداً بالفعل
-                            if (accumulatedText) {
-                                if (!accumulatedText.includes(final)) {
-                                    accumulatedText += ' ' + final;
-                                }
-                            } else {
-                                accumulatedText = final;
+                            // إذا لم نجد كلمات جديدة، نتحقق من طول النص
+                            if (newWordsOnly.length === 0 && newWords.length > oldWords.length) {
+                                // قد يكون هناك كلمات جديدة في المنتصف
+                                newWordsOnly = newWords.slice(oldWords.length);
                             }
-                            updateTextDisplay();
-                            resetSentenceTimer();
-                            resetSilenceTimer();
+
+                            // إذا كان هناك كلمات جديدة، نضيفها
+                            if (newWordsOnly.length > 0) {
+                                accumulatedText += ' ' + newWordsOnly.join(' ');
+                            } else if (newWords.length > oldWords.length) {
+                                // حالة خاصة: النص الجديد أطول ولكن لم نجد كلمات جديدة
+                                // نضيف الفرق
+                                const diff = newWords.slice(oldWords.length);
+                                if (diff.length > 0) {
+                                    accumulatedText += ' ' + diff.join(' ');
+                                }
+                            }
                         }
+
+                        // تحديث آخر نص كامل
+                        lastFullInterim = currentText;
+
+                        // تحديث العرض
+                        updateTextDisplay();
+                        resetSentenceTimer();
+                        resetSilenceTimer();
                     };
 
                     recognizer.onerror = function(event) {
@@ -938,7 +926,7 @@
             }
 
             // ================================================================
-            // 10. AUDIO SETUP
+            // 9. AUDIO SETUP
             // ================================================================
             async function setupAudio() {
                 try {
@@ -977,7 +965,7 @@
             }
 
             // ================================================================
-            // 11. START BUTTON
+            // 10. START BUTTON
             // ================================================================
             function handleStart() {
                 if (hasStarted) return;
@@ -995,7 +983,7 @@
             }
 
             // ================================================================
-            // 12. MAIN TOGGLE FUNCTIONS
+            // 11. MAIN TOGGLE FUNCTIONS
             // ================================================================
             function toggleMainFeature() {
                 isMainOn = !isMainOn;
@@ -1043,7 +1031,7 @@
             }
 
             // ================================================================
-            // 13. THRESHOLD SLIDER
+            // 12. THRESHOLD SLIDER
             // ================================================================
             thresholdSlider.addEventListener('input', function() {
                 VOLUME_THRESHOLD = parseFloat(this.value);
@@ -1051,7 +1039,7 @@
             });
 
             // ================================================================
-            // 14. EXPOSE GLOBALLY
+            // 13. EXPOSE GLOBALLY
             // ================================================================
             window.toggleMainFeature = toggleMainFeature;
             window.toggleContinuousMode = toggleContinuousMode;
@@ -1089,14 +1077,14 @@
             };
 
             // ================================================================
-            // 15. EVENT BINDINGS
+            // 14. EVENT BINDINGS
             // ================================================================
             mainSwitch.addEventListener('click', toggleMainFeature);
             continuousSwitch.addEventListener('click', toggleContinuousMode);
             startBtn.addEventListener('click', handleStart);
 
             // ================================================================
-            // 16. INIT
+            // 15. INIT
             // ================================================================
             (async function init() {
                 const ok = await setupAudio();
@@ -1115,7 +1103,7 @@
             })();
 
             // ================================================================
-            // 17. CLEANUP
+            // 16. CLEANUP
             // ================================================================
             window.addEventListener('beforeunload', function() {
                 if (recognizer) {
