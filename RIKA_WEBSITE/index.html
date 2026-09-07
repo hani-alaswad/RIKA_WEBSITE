@@ -3,117 +3,434 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>تحويل الكلام إلى نص بصمت</title>
+    <title>تحويل الكلام إلى نص - فوري</title>
     <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #f4f7f6;
+            background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
             display: flex;
-            flex-direction: column;
-            align-items: center;
             justify-content: center;
-            height: 100vh;
+            align-items: center;
+            min-height: 100vh;
             margin: 0;
+            padding: 20px;
         }
+        
         .container {
-            background-white: #fff;
-            padding: 30px;
-            border-radius: 12px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(20px);
+            padding: 35px;
+            border-radius: 24px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
             text-align: center;
-            width: 90%;
-            max-width: 500px;
-            background: white;
+            width: 95%;
+            max-width: 700px;
+            border: 1px solid rgba(255,255,255,0.1);
         }
-        button {
-            background-color: #007bff;
-            color: white;
+        
+        h2 {
+            color: #fff;
+            font-size: 28px;
+            margin-bottom: 20px;
+            font-weight: 300;
+            letter-spacing: 1px;
+        }
+        
+        /* مستوى الصوت */
+        .volume-container {
+            background: rgba(0,0,0,0.4);
+            border-radius: 50px;
+            padding: 8px;
+            margin-bottom: 25px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        
+        .volume-bar {
+            height: 8px;
+            background: linear-gradient(90deg, #00f260, #0575e6, #a855f7);
+            border-radius: 50px;
+            width: 0%;
+            transition: width 0.05s linear;
+            box-shadow: 0 0 20px rgba(0, 242, 96, 0.3);
+        }
+        
+        .volume-text {
+            color: #aaa;
+            font-size: 12px;
+            margin-top: 5px;
+            font-family: monospace;
+        }
+        
+        /* زر التسجيل */
+        .mic-btn {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
             border: none;
-            padding: 12px 24px;
-            font-size: 16px;
-            border-radius: 8px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            font-size: 40px;
             cursor: pointer;
-            transition: 0.3s;
+            transition: all 0.3s ease;
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+            position: relative;
+            margin: 10px auto;
         }
-        button:hover { background-color: #0056b3; }
-        button.listening { background-color: #dc3545; }
+        
+        .mic-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 12px 35px rgba(102, 126, 234, 0.6);
+        }
+        
+        .mic-btn:active {
+            transform: scale(0.95);
+        }
+        
+        .mic-btn.listening {
+            background: linear-gradient(135deg, #f093fb, #f5576c);
+            box-shadow: 0 8px 30px rgba(245, 87, 108, 0.5);
+            animation: pulse 1.2s ease-in-out infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(245, 87, 108, 0.5); }
+            50% { box-shadow: 0 0 0 20px rgba(245, 87, 108, 0); }
+        }
+        
+        /* وميض أثناء الاستماع */
+        .listening-indicator {
+            display: none;
+            width: 12px;
+            height: 12px;
+            background: #f5576c;
+            border-radius: 50%;
+            margin: 10px auto;
+            animation: blink 0.8s ease-in-out infinite;
+        }
+        
+        .listening-indicator.active {
+            display: block;
+        }
+        
+        @keyframes blink {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.2; transform: scale(0.8); }
+        }
+        
+        /* صندوق النص */
         #result-box {
-            margin-top: 20px;
-            padding: 15px;
-            border: 1px solid #ccc;
-            border-radius: 8px;
-            min-height: 100px;
-            background-color: #fafafa;
+            margin-top: 25px;
+            padding: 20px;
+            min-height: 120px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 16px;
+            border: 1px solid rgba(255,255,255,0.08);
+            color: #e0e0e0;
             text-align: right;
-            font-size: 18px;
+            font-size: 22px;
+            line-height: 1.8;
+            font-weight: 300;
+            transition: all 0.3s;
         }
-        #status { color: #666; font-size: 14px; margin-bottom: 10px; }
+        
+        #result-box:empty::before {
+            content: "🎤 اضغط على الميكروفون وابدأ التحدث...";
+            color: #666;
+            font-size: 16px;
+        }
+        
+        #result-box .word {
+            display: inline-block;
+            animation: fadeInWord 0.2s ease;
+        }
+        
+        @keyframes fadeInWord {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        #status {
+            color: #888;
+            font-size: 13px;
+            margin-top: 15px;
+            font-family: monospace;
+        }
+        
+        /* تنسيق الجوال */
+        @media (max-width: 480px) {
+            .container { padding: 20px; }
+            h2 { font-size: 20px; }
+            .mic-btn { width: 80px; height: 80px; font-size: 32px; }
+            #result-box { font-size: 18px; min-height: 80px; padding: 15px; }
+        }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h2>تحويل الكلام إلى نص</h2>
-    <div id="status">اضغط على الزر للتحدث</div>
-    <button id="start-btn">ابدأ الاستماع</button>
-    <div id="result-box" id="output">النص سيظهر هنا...</div>
+    <h2>🎙️ تحويل الكلام إلى نص</h2>
+    
+    <!-- مستوى الصوت -->
+    <div class="volume-container">
+        <div class="volume-bar" id="volumeBar"></div>
+    </div>
+    <div class="volume-text" id="volumeText">🔇 المستوى: 0 / 10</div>
+    
+    <!-- مؤشر الاستماع -->
+    <div class="listening-indicator" id="indicator"></div>
+    
+    <!-- زر الميكروفون -->
+    <button class="mic-btn" id="micBtn">🎤</button>
+    
+    <div id="status">⏸️ في انتظار البدء...</div>
+    
+    <!-- صندوق النص -->
+    <div id="result-box"></div>
 </div>
 
 <script>
-    // التأكد من دعم المتصفح للخاصية
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    
-    if (!SpeechRecognition) {
-        alert("عذراً، متصفحك لا يدعم خاصية التعرف على الصوت. يرجى استخدام Google Chrome.");
-    } else {
-        const recognition = new SpeechRecognition();
-        
-        // إعدادات التعرف على الصوت
-        recognition.lang = 'ar-SA'; // تحديد اللغة العربية
-        recognition.continuous = false; // الاستماع لمرة واحدة عند الضغط (كما طلبت)
-        recognition.interimResults = false; // عدم إظهار نتائج مؤقتة
-
-        const startBtn = document.getElementById('start-btn');
-        const statusTxt = document.getElementById('status');
+    (function() {
+        // --- العناصر ---
+        const micBtn = document.getElementById('micBtn');
         const resultBox = document.getElementById('result-box');
+        const statusText = document.getElementById('status');
+        const volumeBar = document.getElementById('volumeBar');
+        const volumeText = document.getElementById('volumeText');
+        const indicator = document.getElementById('indicator');
         
         let isListening = false;
-
-        startBtn.addEventListener('click', () => {
+        let recognition = null;
+        let audioContext = null;
+        let analyser = null;
+        let dataArray = null;
+        let animationFrame = null;
+        let stream = null;
+        
+        // --- التحقق من الدعم ---
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+            statusText.textContent = '❌ متصفحك لا يدعم خاصية التعرف على الصوت';
+            micBtn.disabled = true;
+            return;
+        }
+        
+        // --- إعداد التعرف ---
+        recognition = new SpeechRecognition();
+        recognition.lang = 'ar-SA';
+        recognition.continuous = true;      // استمرار الاستماع
+        recognition.interimResults = true;  // عرض نتائج مؤقتة فورية
+        recognition.maxAlternatives = 1;
+        
+        let finalTranscript = '';
+        
+        // --- معالجة النتائج (فورية) ---
+        recognition.onresult = (event) => {
+            let interimTranscript = '';
+            
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+                const transcript = event.results[i][0].transcript;
+                
+                if (event.results[i].isFinal) {
+                    finalTranscript += transcript + ' ';
+                } else {
+                    interimTranscript += transcript;
+                }
+            }
+            
+            // عرض النص الفوري (كلمات تظهر لحظة بلحظة)
+            let displayText = finalTranscript + interimTranscript;
+            
+            // تقسيم الكلمات وإضافة تأثير
+            if (displayText.trim()) {
+                const words = displayText.trim().split(' ');
+                resultBox.innerHTML = words.map(word => 
+                    `<span class="word">${word}</span>`
+                ).join(' ');
+            } else {
+                resultBox.innerHTML = '';
+            }
+            
+            // التمرير للأسفل تلقائياً
+            resultBox.scrollTop = resultBox.scrollHeight;
+        };
+        
+        // --- عند بدء الاستماع ---
+        recognition.onstart = () => {
+            isListening = true;
+            micBtn.classList.add('listening');
+            micBtn.textContent = '⏹️';
+            indicator.classList.add('active');
+            statusText.textContent = '🔴 جاري الاستماع... (تحدث الآن)';
+            finalTranscript = '';
+            resultBox.innerHTML = '';
+            
+            // بدء تحليل الصوت لمستوى الضجيج
+            startVolumeMonitoring();
+        };
+        
+        // --- عند انتهاء الاستماع ---
+        recognition.onend = () => {
+            isListening = false;
+            micBtn.classList.remove('listening');
+            micBtn.textContent = '🎤';
+            indicator.classList.remove('active');
+            statusText.textContent = '⏸️ متوقف';
+            
+            stopVolumeMonitoring();
+            
+            // إذا لم يكن هناك نص، عرض رسالة
+            if (!resultBox.textContent.trim()) {
+                resultBox.innerHTML = '';
+            }
+        };
+        
+        // --- معالجة الأخطاء ---
+        recognition.onerror = (event) => {
+            if (event.error === 'not-allowed') {
+                statusText.textContent = '❌ تم رفض إذن الميكروفون';
+            } else if (event.error === 'no-speech') {
+                statusText.textContent = '🔇 لم يتم سماع صوت، حاول مرة أخرى';
+                // لا نوقف الاستماع، نستمر
+            } else if (event.error === 'audio-capture') {
+                statusText.textContent = '❌ لا يمكن الوصول للميكروفون';
+            } else {
+                statusText.textContent = `⚠️ خطأ: ${event.error}`;
+            }
+            
+            // في حالة خطأ فادح، نوقف الاستماع
+            if (event.error === 'not-allowed' || event.error === 'audio-capture') {
+                recognition.stop();
+            }
+        };
+        
+        // --- زر الميكروفون (تبديل) ---
+        micBtn.addEventListener('click', () => {
             if (!isListening) {
-                recognition.start();
+                try {
+                    recognition.start();
+                } catch (e) {
+                    // إذا كان قيد التشغيل بالفعل
+                    if (e.message.includes('already started')) {
+                        recognition.stop();
+                        setTimeout(() => recognition.start(), 100);
+                    } else {
+                        statusText.textContent = '❌ خطأ: ' + e.message;
+                    }
+                }
             } else {
                 recognition.stop();
             }
         });
-
-        // عند بدء الاستماع فعلياً
-        recognition.onstart = () => {
-            isListening = true;
-            startBtn.innerText = "جاري الاستماع... (اضغط للإيقاف)";
-            startBtn.classList.add('listening');
-            statusTxt.innerText = "يمكنك التحدث الآن، الميكروفون يعمل بصمت.";
-        };
-
-        // عند الانتهاء والحصول على النص
-        recognition.onresult = (event) => {
-            const transcript = event.results[0][0].transcript;
-            resultBox.innerText = transcript;
-        };
-
-        // عند توقف الميكروفون
-        recognition.onend = () => {
-            isListening = false;
-            startBtn.innerText = "ابدأ الاستماع";
-            startBtn.classList.remove('listening');
-            statusTxt.innerText = "تم إيقاف الاستماع.";
-        };
-
-        // في حال حدوث خطأ
-        recognition.onerror = (event) => {
-            statusTxt.innerText = "حدث خطأ أثناء الاستماع: " + event.error;
-        };
-    }
+        
+        // --- تحليل مستوى الصوت (باستخدام Web Audio API) ---
+        async function startVolumeMonitoring() {
+            try {
+                // الحصول على تدفق الصوت من الميكروفون
+                stream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        echoCancellation: false,
+                        noiseSuppression: false,
+                        autoGainControl: false
+                    }
+                });
+                
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                analyser = audioContext.createAnalyser();
+                analyser.fftSize = 256;
+                
+                const source = audioContext.createMediaStreamSource(stream);
+                source.connect(analyser);
+                
+                dataArray = new Uint8Array(analyser.frequencyBinCount);
+                
+                updateVolume();
+            } catch (err) {
+                console.warn('لا يمكن تحليل مستوى الصوت:', err);
+                volumeText.textContent = '⚠️ لا يمكن قياس المستوى';
+            }
+        }
+        
+        function updateVolume() {
+            if (!analyser || !isListening) return;
+            
+            analyser.getByteFrequencyData(dataArray);
+            
+            // حساب متوسط الشدة (0-255)
+            let sum = 0;
+            for (let i = 0; i < dataArray.length; i++) {
+                sum += dataArray[i];
+            }
+            let average = sum / dataArray.length;
+            
+            // تحويل إلى مقياس 0-10
+            let level = Math.min(10, Math.floor((average / 25.5) * 1.2));
+            level = Math.max(0, level);
+            
+            // تحديث الشريط
+            const percent = (level / 10) * 100;
+            volumeBar.style.width = percent + '%';
+            
+            // تحديث النص مع أيقونات
+            const icons = ['🔇', '🔈', '🔉', '🔊', '📢'];
+            let iconIndex = Math.min(4, Math.floor(level / 2.5));
+            volumeText.textContent = `${icons[iconIndex]} المستوى: ${level} / 10`;
+            
+            // تغيير لون الشريط حسب المستوى
+            if (level < 3) {
+                volumeBar.style.background = 'linear-gradient(90deg, #00f260, #0575e6)';
+            } else if (level < 6) {
+                volumeBar.style.background = 'linear-gradient(90deg, #f7971e, #ffd200)';
+            } else {
+                volumeBar.style.background = 'linear-gradient(90deg, #f5576c, #f093fb)';
+            }
+            
+            animationFrame = requestAnimationFrame(updateVolume);
+        }
+        
+        function stopVolumeMonitoring() {
+            if (animationFrame) {
+                cancelAnimationFrame(animationFrame);
+                animationFrame = null;
+            }
+            
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                stream = null;
+            }
+            
+            if (audioContext && audioContext.state !== 'closed') {
+                audioContext.close();
+                audioContext = null;
+            }
+            
+            volumeBar.style.width = '0%';
+            volumeText.textContent = '🔇 المستوى: 0 / 10';
+        }
+        
+        // --- تنظيف عند إغلاق الصفحة ---
+        window.addEventListener('beforeunload', () => {
+            if (isListening) {
+                recognition.stop();
+            }
+            stopVolumeMonitoring();
+        });
+        
+        // --- معالجة حالة الصفحة (عند العودة للصفحة) ---
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden && isListening) {
+                // إذا غادر المستخدم الصفحة، نوقف الاستماع لتوفير الموارد
+                recognition.stop();
+            }
+        });
+        
+        console.log('✅ التطبيق جاهز - استخدم الميكروفون لتحويل الكلام إلى نص فوري');
+    })();
 </script>
 
 </body>
