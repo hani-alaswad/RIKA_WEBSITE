@@ -2,10 +2,10 @@
 <html dir="rtl" lang="ar">
 <head>
     <meta charset="UTF-8">
-    <title>تعرف صوت - منطق مصحح</title>
+    <title>تعرف صوت - حساسية عالية</title>
 </head>
 <body>
-    <button id="btnMic">🎤 تسجيل</button>
+    <button id="btnMic">🎤 تسجيل o</button>
     <div id="divStatus">جاهز</div>
     <div id="divText"></div>
     <div id="divError"></div>
@@ -17,12 +17,13 @@
         // ============================================================
         let recognizer = null;
         let isListening = false;
-        let fullText = '';        // النص التراكمي (يظهر أثناء الكلام)
-        let finalResult = '';     // النتيجة النهائية (تظهر بعد التوقف)
+        let fullText = '';
+        let finalResult = '';
         let audioCtx = null;
         let analyser = null;
         let stream = null;
         let volumeLevel = 0;
+        let gainNode = null; // ⭐ جديد: للتحكم في حساسية الصوت
 
         // ============================================================
         // 2. عناصر الواجهة
@@ -73,6 +74,9 @@
             recognizer.lang = 'ar-SA';
             recognizer.continuous = true;
             recognizer.interimResults = true;
+            
+            // ⭐ تحسينات إضافية للتعرف
+            recognizer.maxAlternatives = 1;
 
             recognizer.onstart = onStart;
             recognizer.onend = onEnd;
@@ -110,16 +114,14 @@
         }
 
         // ============================================================
-        // 5. دوال الأحداث (المنطق الرئيسي المُصحح)
+        // 5. دوال الأحداث
         // ============================================================
 
-        // 5.1 عند بدء الاستماع
         function onStart() {
             isListening = true;
             btnMic.textContent = '⏹️ إيقاف';
             setStatus('🔴 جاري الاستماع...');
             
-            // مسح كل شيء عند البدء
             fullText = '';
             finalResult = '';
             showText('');
@@ -127,7 +129,6 @@
             startVolumeMonitor();
         }
 
-        // 5.2 عند انتهاء الاستماع
         function onEnd() {
             isListening = false;
             btnMic.textContent = '🎤 تسجيل';
@@ -135,66 +136,40 @@
             stopVolumeMonitor();
         }
 
-        // 5.3 ⭐⭐⭐ المنطق المُصحح لمعالجة النص ⭐⭐⭐
         function onResult(event) {
-            let interimText = '';   // النص المؤقت (أثناء الكلام)
-            let finalText = '';     // النص النهائي (بعد التوقف)
+            let interimText = '';
+            let finalText = '';
 
-            // تجميع النتائج
             for (let i = event.resultIndex; i < event.results.length; i++) {
                 const text = event.results[i][0].transcript.trim();
                 
                 if (event.results[i].isFinal) {
-                    // ✅ النص النهائي (توقف المستخدم عن الكلام)
                     finalText = text;
                 } else {
-                    // ✅ النص المؤقت (أثناء الكلام)
                     interimText = text;
                 }
             }
 
-            // ============================================================
-            // المنطق الجديد:
-            // 1. أثناء الكلام: نضيف الكلمات الجديدة إلى النص التراكمي
-            // 2. بعد التوقف: نعرض النتيجة النهائية ونحذف التراكمي
-            // ============================================================
-
             if (interimText) {
-                // ✅ حالة 1: المستخدم يتكلم (نص مؤقت)
-                // نضيف الكلمة الجديدة إلى النص التراكمي
                 if (fullText) {
                     fullText += ' ' + interimText;
                 } else {
                     fullText = interimText;
                 }
-                
-                // نعرض النص التراكمي فوراً
                 showText(fullText);
-                
-                // نعيد تعيين finalResult لأننا لا نزال في وضع الكلام
                 finalResult = '';
-                
             } else if (finalText) {
-                // ✅ حالة 2: المستخدم توقف عن الكلام (نص نهائي)
-                // النتيجة النهائية هي النص الكامل
                 finalResult = finalText;
-                
-                // ⭐ نمسح النص التراكمي
                 fullText = '';
-                
-                // ⭐ نعرض النتيجة النهائية فقط
                 showText(finalResult);
-                
-                // تحديث الحالة
                 setStatus('✅ تم التعرف على: "' + finalResult + '"');
             }
         }
 
-        // 5.4 معالجة الأخطاء
         function onError(event) {
             const errors = {
                 'not-allowed': 'تم رفض إذن الميكروفون',
-                'no-speech': 'لم يتم سماع صوت',
+                'no-speech': 'لم يتم سماع صوت - حاول التحدث بصوت أعلى',
                 'audio-capture': 'مشكلة في الميكروفون',
                 'network': 'مشكلة في الإنترنت',
                 'aborted': 'تم الإيقاف'
@@ -211,22 +186,38 @@
         }
 
         // ============================================================
-        // 6. دوال قياس الصوت (نفسها دون تغيير)
+        // 6. دوال قياس الصوت (محسنة للحساسية)
         // ============================================================
         async function startVolumeMonitor() {
             try {
+                // ⭐ تحسين إعدادات الميكروفون للحساسية العالية
                 stream = await navigator.mediaDevices.getUserMedia({
-                    audio: { echoCancellation: false, noiseSuppression: false }
+                    audio: {
+                        echoCancellation: true,      // تقليل الصدى
+                        noiseSuppression: false,     // ⭐ إيقاف تقليل الضوضاء (يحسن الحساسية)
+                        autoGainControl: true,       // ⭐ تفعيل التحكم التلقائي بالكسب (مهم جداً)
+                        sampleRate: 48000,           // جودة عالية
+                        channelCount: 1              // أحادي
+                    }
                 });
 
                 audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                
+                // ⭐ إضافة عقدة تضخيم الصوت (Gain Node)
+                gainNode = audioCtx.createGain();
+                gainNode.gain.value = 2.0; // ⭐ مضاعفة الصوت (زيادة الحساسية)
+
                 analyser = audioCtx.createAnalyser();
-                analyser.fftSize = 256;
+                analyser.fftSize = 512;  // ⭐ زيادة الدقة
                 analyser.smoothingTimeConstant = 0.8;
 
                 const source = audioCtx.createMediaStreamSource(stream);
-                source.connect(analyser);
+                
+                // ⭐ توصيل: مصدر ← تضخيم ← تحليل
+                source.connect(gainNode);
+                gainNode.connect(analyser);
 
+                // ⭐ تغيير عتبة الصوت للكشف عن الأصوات المنخفضة
                 updateVolume();
             } catch (e) {
                 showError('لا يمكن قياس الصوت: ' + e.message);
@@ -242,6 +233,7 @@
                 audioCtx.close();
                 audioCtx = null;
             }
+            gainNode = null;
             volumeLevel = 0;
             showVolume(0);
         }
@@ -260,10 +252,23 @@
                     sum += data[i];
                 }
                 const avg = sum / data.length;
-                const level = Math.min(10, Math.floor((avg / 20) * 1.5));
-                volumeLevel = Math.max(0, Math.min(10, level));
+                
+                // ⭐ معادلة محسنة للحساسية (تعطي قراءات أعلى للصوت المنخفض)
+                let level = Math.min(10, Math.floor((avg / 15) * 1.8));
+                level = Math.max(0, Math.min(10, level));
 
-                showVolume(volumeLevel);
+                volumeLevel = level;
+                showVolume(level);
+
+                // ⭐ عرض رسالة تنبيه إذا كان الصوت ضعيفاً
+                if (isListening && level < 2) {
+                    setStatus('🔇 صوت ضعيف - قرب الميكروفون أو تحدث بصوت أعلى');
+                } else if (isListening && level >= 2 && level < 4) {
+                    setStatus('🔊 صوت مقبول - استمر');
+                } else if (isListening && level >= 4) {
+                    setStatus('🔊 صوت جيد - واضح');
+                }
+
                 requestAnimationFrame(updateVolume);
             } catch (e) {
                 showError('خطأ في قياس الصوت: ' + e.message);
@@ -271,7 +276,7 @@
         }
 
         // ============================================================
-        // 7. دوال الوصول (Getters)
+        // 7. دوال الوصول
         // ============================================================
         function getVolumeLevel() { return volumeLevel; }
         function getFinalText() { return finalResult; }
