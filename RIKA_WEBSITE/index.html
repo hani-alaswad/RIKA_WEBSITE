@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>التعرف على الصوت الذكي</title>
+    <title>التعرف على الصوت الذكي - نسخة مستقرة</title>
     <style>
         * {
             margin: 0;
@@ -346,7 +346,7 @@
 
     <div class="app-container" id="appRoot">
 
-        <div class="app-title">🎙️ - <span>تعرف</span> الصوت الذكي</div>
+        <div class="app-title">🎙️ ¦ <span>تعرف</span> الصوت الذكي</div>
 
         <div class="controls">
             <div class="switch-wrapper">
@@ -447,6 +447,9 @@
             let monitorTimer = null;
             let recognizer = null;
 
+            // ⭐ متغير للإيقاف اليدوي
+            let isManualStop = false;
+
             // النصوص
             let accumulatedText = '';
             let finalSentence = '';
@@ -457,14 +460,11 @@
             // لمنع التكرار
             let lastFullInterim = '';
 
-            // مؤقتات
             let silenceTimer = null;
             let sentenceFinalizeTimer = null;
             let finalDisplayTimer = null;
             let greenBlinkTimer = null;
-            let restartTimer = null; // مؤقت إعادة التشغيل
 
-            // ⭐ القيمة الافتراضية 3
             let VOLUME_THRESHOLD = 3;
             const SILENCE_DURATION_MS = 15000;
             const SENTENCE_GAP_MS = 3000;
@@ -473,10 +473,8 @@
             const MONITOR_INTERVAL_OFF_MS = 500;
             const SPEECH_FREQ_MIN = 200;
             const SPEECH_FREQ_MAX = 3000;
-            const RESTART_DELAY_MS = 500; // تأخير إعادة التشغيل
 
             let currentVolume = 0;
-            let isManualStop = false; // لمنع إعادة التشغيل عند الإيقاف اليدوي
 
             // ================================================================
             // 3. UI UPDATE FUNCTIONS
@@ -567,7 +565,7 @@
             }
 
             // ================================================================
-            // 4. VOLUME & FREQUENCY ANALYSIS
+            // 4. VOLUME & FREQUENCY ANALYSIS (مضاعف ×1.5)
             // ================================================================
             function getVolumeAndFreq() {
                 if (!analyser) return { volume: 0, isSpeech: false };
@@ -648,18 +646,27 @@
                     return;
                 }
 
-                // ============================================================
-                // ⭐ المنطق الجديد: تشغيل الخدمة عند الصوت > 2
-                // ============================================================
-                const isLoud = currentVolume > 2;
+                if (isContinuous) {
+                    if (!isListening) {
+                        clearTextForNewSentence();
+                        startRecognition();
+                    }
+                    return;
+                }
 
-                if (isLoud && isSpeechFreq && !isListening) {
-                    // تشغيل الخدمة
+                const isLoud = currentVolume > VOLUME_THRESHOLD;
+
+                if (isLoud && isSpeechFreq) {
                     updateVolumeStatus('✅ تردد مناسب - بدء الاستماع');
+
                     if (isShowingFinal) {
                         clearTextForNewSentence();
                     }
-                    startRecognition();
+
+                    if (!isListening) {
+                        clearTextForNewSentence();
+                        startRecognition();
+                    }
                     resetSilenceTimer();
                 } else if (isLoud && !isSpeechFreq) {
                     updateVolumeStatus('⚠️ تردد غير مناسب للكلام');
@@ -667,27 +674,7 @@
                     updateVolumeStatus('');
                 }
 
-                // ============================================================
-                // ⭐ عداد الصمت: فقط عندما يكون المستوى 0 أو 1
-                // ============================================================
-                if (isListening && currentVolume <= 1) {
-                    // silenceTimer يعمل (تم ضبطه مسبقاً)
-                } else if (isListening && currentVolume > 1) {
-                    // أي صوت أعلى من 1 → إعادة ضبط العداد
-                    resetSilenceTimer();
-                }
-
-                // ============================================================
-                // ⭐ إعادة تشغيل تلقائي إذا توقفت الخدمة فجأة
-                // ============================================================
-                if (!isListening && !isManualStop && isMainOn && hasStarted && !isContinuous) {
-                    // إذا كانت الخدمة متوقفة بدون سبب (ليس إيقاف يدوي)
-                    // نتحقق من أن الصوت مرتفع كافي لتشغيلها
-                    if (currentVolume > 2 && isSpeechFreq) {
-                        startRecognition();
-                        resetSilenceTimer();
-                    }
-                }
+                // ⭐ نترك عداد الصمت يعمل
             }
 
             // ================================================================
@@ -700,10 +687,11 @@
                 }
                 silenceTimer = setTimeout(() => {
                     if (isListening && !isContinuous && isMainOn && hasStarted) {
-                        // ⭐ فقط عندما يكون المستوى 0 أو 1 لمدة 15 ثانية
+                        // ⭐ فقط عندما يكون المستوى 0 أو 1
                         if (currentVolume <= 1) {
-                            // إيقاف الخدمة
-                            stopRecognition(true);
+                            // ⭐ إيقاف الخدمة بسبب الصمت (وليس يدوياً)
+                            isManualStop = false;
+                            stopRecognition(false);
                             updateStatus('⏸️ توقف تلقائي (صمت 15 ثانية - مستوى 0 أو 1)', false);
                             setDotRed('idle');
                         } else {
@@ -747,8 +735,8 @@
                     setDotGreen('blink');
                     updateStatus('✅ جملة مكتملة: "' + finalSentence + '"', false);
 
-                    // ⭐ لا نوقف الخدمة، نستمر في الاستماع
-                    // نعيد ضبط عداد الصمت فقط
+                    // ⭐ لا نوقف الخدمة بعد الجملة، نستمر في الاستماع
+                    // فقط نعيد ضبط عداد الصمت
                     resetSilenceTimer();
 
                     if (finalDisplayTimer) {
@@ -769,18 +757,12 @@
             }
 
             // ================================================================
-            // 8. RECOGNITION
+            // 8. RECOGNITION - مع إعادة التشغيل التلقائي
             // ================================================================
             function startRecognition() {
                 if (isListening) return;
                 if (!isMainOn && !isContinuous) return;
                 if (!hasStarted) return;
-
-                // إلغاء أي إعادة تشغيل مجدولة
-                if (restartTimer) {
-                    clearTimeout(restartTimer);
-                    restartTimer = null;
-                }
 
                 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
                 if (!SpeechRecognition) {
@@ -805,11 +787,12 @@
                     };
 
                     recognizer.onend = function() {
-                        // إذا كان الإيقاف يدوياً، لا نعيد التشغيل
+                        // ⭐ إذا كان الإيقاف يدوياً، لا نعيد التشغيل
                         if (isManualStop) {
                             isListening = false;
                             setDotRed('idle');
                             textBox.classList.remove('listening');
+                            updateStatus('⏸️ تم الإيقاف يدوياً', false);
                             if (silenceTimer) {
                                 clearTimeout(silenceTimer);
                                 silenceTimer = null;
@@ -817,44 +800,42 @@
                             return;
                         }
 
-                        // إذا كان التشغيل المستمر مفعلاً
+                        // ⭐ إذا كان التشغيل المستمر مفعلاً، نعيد التشغيل فوراً
                         if (isContinuous && isMainOn && hasStarted) {
-                            scheduleRestart();
+                            setTimeout(() => {
+                                if (isMainOn && isContinuous && hasStarted && !isListening) {
+                                    try { recognizer.start(); } catch (e) {}
+                                }
+                            }, 100);
                             return;
                         }
 
-                        // ⭐ إعادة تشغيل تلقائي إذا توقفت الخدمة فجأة
-                        if (isMainOn && hasStarted && !isContinuous) {
-                            // نتحقق من أن الصوت لا يزال مرتفعاً
-                            if (currentVolume > 2) {
-                                scheduleRestart();
-                            } else {
-                                isListening = false;
-                                setDotRed('idle');
-                                textBox.classList.remove('listening');
-                                if (silenceTimer) {
-                                    clearTimeout(silenceTimer);
-                                    silenceTimer = null;
+                        // ⭐ في الوضع الذكي: نعيد التشغيل إذا لم يكن هناك صمت مقصود
+                        // ولكن إذا كان الصمت هو سبب التوقف، لا نعيد التشغيل
+                        // نتحقق: إذا كان currentVolume <= 1 فهذا يعني أن الصمت هو السبب
+                        if (currentVolume > 1) {
+                            // إذا كان هناك صوت، نعيد التشغيل
+                            setTimeout(() => {
+                                if (isMainOn && !isContinuous && hasStarted && !isListening && !isManualStop) {
+                                    try { recognizer.start(); } catch (e) {}
                                 }
-                                if (!isShowingFinal) {
-                                    updateStatus('⏸️ توقف التعرف', false);
-                                }
-                            }
+                            }, 200);
                         } else {
+                            // صمت: لا نعيد التشغيل، نترك الخدمة متوقفة
                             isListening = false;
                             setDotRed('idle');
                             textBox.classList.remove('listening');
+                            if (!isShowingFinal) {
+                                updateStatus('⏸️ توقف بسبب الصمت', false);
+                            }
                             if (silenceTimer) {
                                 clearTimeout(silenceTimer);
                                 silenceTimer = null;
-                            }
-                            if (!isShowingFinal) {
-                                updateStatus('⏸️ توقف التعرف', false);
                             }
                         }
                     };
 
-                    // ⭐⭐⭐ حل مشكلة التكرار ⭐⭐⭐
+                    // ⭐⭐⭐ الحل النهائي لمشكلة التكرار ⭐⭐⭐
                     recognizer.onresult = function(event) {
                         let interim = '';
                         let final = '';
@@ -877,7 +858,7 @@
                             lastFullInterim = '';
                         }
 
-                        // استخراج الكلمات الجديدة فقط
+                        // ⭐ استخراج الكلمات الجديدة فقط
                         if (lastFullInterim === '') {
                             accumulatedText = currentText;
                         } else {
@@ -925,33 +906,33 @@
                         const msg = errors[event.error] || '⚠️ خطأ: ' + event.error;
                         updateStatus(msg, true);
 
-                        // إعادة تشغيل تلقائي عند الأخطاء
-                        if (isMainOn && hasStarted && !isManualStop) {
-                            scheduleRestart();
+                        // ⭐ إعادة تشغيل تلقائية عند أي خطأ (ما عدا الرفض)
+                        if (event.error !== 'not-allowed' && event.error !== 'audio-capture') {
+                            if (isMainOn && hasStarted && !isManualStop) {
+                                setTimeout(() => {
+                                    if (isMainOn && hasStarted && !isListening && !isManualStop) {
+                                        try { recognizer.start(); } catch (e) {}
+                                    }
+                                }, 500);
+                            }
+                        } else {
+                            if (isListening) stopRecognition(true);
                         }
                     };
 
                     recognizer.start();
                 } catch (e) {
                     updateStatus('❌ فشل بدء التعرف: ' + e.message, true);
-                    // محاولة إعادة التشغيل
-                    scheduleRestart();
                 }
             }
 
-            // ================================================================
-            // 9. STOP RECOGNITION
-            // ================================================================
+            // ⭐ دالة الإيقاف مع تحديد إذا كان يدوياً أم لا
             function stopRecognition(manual = false) {
                 if (manual) {
                     isManualStop = true;
                 }
                 if (recognizer) {
                     try { recognizer.stop(); } catch (e) {}
-                }
-                if (restartTimer) {
-                    clearTimeout(restartTimer);
-                    restartTimer = null;
                 }
                 isListening = false;
                 setDotRed('idle');
@@ -970,26 +951,7 @@
             }
 
             // ================================================================
-            // 10. SCHEDULE RESTART
-            // ================================================================
-            function scheduleRestart() {
-                if (restartTimer) {
-                    clearTimeout(restartTimer);
-                    restartTimer = null;
-                }
-                if (!isMainOn || !hasStarted || isListening) return;
-                if (isManualStop) return;
-
-                restartTimer = setTimeout(() => {
-                    if (!isListening && isMainOn && hasStarted && !isManualStop) {
-                        startRecognition();
-                    }
-                    restartTimer = null;
-                }, RESTART_DELAY_MS);
-            }
-
-            // ================================================================
-            // 11. AUDIO SETUP
+            // 9. AUDIO SETUP
             // ================================================================
             async function setupAudio() {
                 try {
@@ -1028,13 +990,12 @@
             }
 
             // ================================================================
-            // 12. START BUTTON
+            // 10. START BUTTON
             // ================================================================
             function handleStart() {
                 if (hasStarted) return;
                 hasStarted = true;
                 startBtnWrap.style.display = 'none';
-                isManualStop = false;
                 updateStatus('🔴 جاري الاستماع...', false);
                 clearTextForNewSentence();
                 if (isContinuous && isMainOn) {
@@ -1047,14 +1008,15 @@
             }
 
             // ================================================================
-            // 13. MAIN TOGGLE FUNCTIONS
+            // 11. MAIN TOGGLE FUNCTIONS
             // ================================================================
             function toggleMainFeature() {
                 isMainOn = !isMainOn;
                 updateSwitches();
 
                 if (!isMainOn) {
-                    stopRecognition(true);
+                    // إيقاف يدوي
+                    if (isListening) stopRecognition(true);
                     if (monitorTimer) {
                         stopMonitoring();
                         startMonitoring();
@@ -1097,7 +1059,7 @@
             }
 
             // ================================================================
-            // 14. THRESHOLD SLIDER
+            // 12. THRESHOLD SLIDER
             // ================================================================
             thresholdSlider.addEventListener('input', function() {
                 VOLUME_THRESHOLD = parseFloat(this.value);
@@ -1105,7 +1067,7 @@
             });
 
             // ================================================================
-            // 15. EXPOSE GLOBALLY
+            // 13. EXPOSE GLOBALLY
             // ================================================================
             window.toggleMainFeature = toggleMainFeature;
             window.toggleContinuousMode = toggleContinuousMode;
@@ -1121,7 +1083,8 @@
                     isShowingFinal: isShowingFinal,
                     sentenceCount: sentenceCount,
                     sentenceHistory: sentenceHistory.slice(),
-                    threshold: VOLUME_THRESHOLD
+                    threshold: VOLUME_THRESHOLD,
+                    isManualStop: isManualStop
                 };
             };
             window.resetApp = function() {
@@ -1144,14 +1107,14 @@
             };
 
             // ================================================================
-            // 16. EVENT BINDINGS
+            // 14. EVENT BINDINGS
             // ================================================================
             mainSwitch.addEventListener('click', toggleMainFeature);
             continuousSwitch.addEventListener('click', toggleContinuousMode);
             startBtn.addEventListener('click', handleStart);
 
             // ================================================================
-            // 17. INIT
+            // 15. INIT
             // ================================================================
             (async function init() {
                 const ok = await setupAudio();
@@ -1170,15 +1133,11 @@
             })();
 
             // ================================================================
-            // 18. CLEANUP
+            // 16. CLEANUP
             // ================================================================
             window.addEventListener('beforeunload', function() {
                 if (recognizer) {
                     try { recognizer.abort(); } catch (e) {}
-                }
-                if (restartTimer) {
-                    clearTimeout(restartTimer);
-                    restartTimer = null;
                 }
                 stopMonitoring();
                 if (mediaStream) {
