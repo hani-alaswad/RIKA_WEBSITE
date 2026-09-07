@@ -68,17 +68,27 @@
             width: 100%;
             height: 6px;
             -webkit-appearance: none;
+            appearance: none;
             background: #dde1e6;
             border-radius: 5px;
             outline: none;
         }
         input[type="range"]::-webkit-slider-thumb {
             -webkit-appearance: none;
+            appearance: none;
             width: 20px;
             height: 20px;
             border-radius: 50%;
             background: #3498db;
             cursor: pointer;
+        }
+        input[type="range"]::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #3498db;
+            cursor: pointer;
+            border: none;
         }
         .btn {
             width: 100%;
@@ -105,6 +115,9 @@
             cursor: not-allowed;
             transform: none;
         }
+        .btn.stopped {
+            background: #e74c3c;
+        }
         #status {
             margin-top: 20px;
             padding: 12px;
@@ -126,11 +139,16 @@
             border-color: #c6e5c6;
             color: #2d6a2d;
         }
+        #status.warning {
+            background: #fff3cd;
+            border-color: #ffc107;
+            color: #856404;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🔊 قارئ النص</h1>
+        <h1>🔊 = قارئ النص </h1>
         
         <textarea id="textInput" placeholder="اكتب النص هنا...">مرحباً، هذا اختبار لخاصية تحويل النص إلى كلام.</textarea>
         
@@ -158,120 +176,209 @@
     </div>
 
     <script>
-        // التحقق من دعم متصفح كروم لأندرويد لـ Speech Synthesis
-        const statusDiv = document.getElementById('status');
-        const textInput = document.getElementById('textInput');
-        const speedSlider = document.getElementById('speedSlider');
-        const pitchSlider = document.getElementById('pitchSlider');
-        const speedValue = document.getElementById('speedValue');
-        const pitchValue = document.getElementById('pitchValue');
-        const readBtn = document.getElementById('readBtn');
+        (function() {
+            'use strict';
 
-        // تحديث القيم المعروضة للمنزلقتين
-        speedSlider.addEventListener('input', function() {
-            speedValue.textContent = parseFloat(this.value).toFixed(1);
-        });
+            const statusDiv = document.getElementById('status');
+            const textInput = document.getElementById('textInput');
+            const speedSlider = document.getElementById('speedSlider');
+            const pitchSlider = document.getElementById('pitchSlider');
+            const speedValue = document.getElementById('speedValue');
+            const pitchValue = document.getElementById('pitchValue');
+            const readBtn = document.getElementById('readBtn');
 
-        pitchSlider.addEventListener('input', function() {
-            pitchValue.textContent = parseFloat(this.value).toFixed(1);
-        });
+            let currentUtterance = null;
+            let isSpeaking = false;
 
-        // دالة عرض الحالة
-        function setStatus(message, type = 'info') {
-            statusDiv.textContent = message;
-            statusDiv.className = type;
-        }
+            // تحديث القيم المعروضة للمنزلقتين
+            speedSlider.addEventListener('input', function() {
+                speedValue.textContent = parseFloat(this.value).toFixed(1);
+            });
 
-        // التحقق من دعم التطبيق
-        if (!('speechSynthesis' in window)) {
-            setStatus('❌ متصفحك لا يدعم خاصية تحويل النص إلى كلام', 'error');
-            readBtn.disabled = true;
-        } else {
-            setStatus('✅ التطبيق جاهز، اختر نصاً واضغط اقرأ', 'success');
-        }
+            pitchSlider.addEventListener('input', function() {
+                pitchValue.textContent = parseFloat(this.value).toFixed(1);
+            });
 
-        // قراءة النص
-        readBtn.addEventListener('click', function() {
-            const text = textInput.value.trim();
-            
-            // التحقق من وجود نص
-            if (!text) {
-                setStatus('⚠️ الرجاء إدخال نص للقراءة', 'error');
+            // دالة عرض الحالة
+            function setStatus(message, type = 'info') {
+                statusDiv.textContent = message;
+                statusDiv.className = type || '';
+            }
+
+            // دالة إعادة ضبط الزر
+            function resetButton() {
+                readBtn.textContent = '📖 اقرأ النص';
+                readBtn.classList.remove('stopped');
+                readBtn.disabled = false;
+                isSpeaking = false;
+                currentUtterance = null;
+            }
+
+            // دالة إعداد زر الإيقاف
+            function setStopButton() {
+                readBtn.textContent = '⏹️ إيقاف';
+                readBtn.classList.add('stopped');
+                readBtn.disabled = false;
+                isSpeaking = true;
+            }
+
+            // التحقق من دعم التطبيق
+            if (!('speechSynthesis' in window)) {
+                setStatus('❌ متصفحك لا يدعم خاصية تحويل النص إلى كلام', 'error');
+                readBtn.disabled = true;
                 return;
             }
 
-            // إلغاء أي قراءة سابقة
-            if (window.speechSynthesis.speaking) {
-                window.speechSynthesis.cancel();
-                setStatus('⏸️ تم إيقاف القراءة السابقة', 'info');
-            }
-
-            // إنشاء كائن الكلام
-            const utterance = new SpeechSynthesisUtterance(text);
-            utterance.lang = 'ar-SA'; // اللغة العربية
-            utterance.rate = parseFloat(speedSlider.value);
-            utterance.pitch = parseFloat(pitchSlider.value);
-            utterance.volume = 1;
-
-            // أحداث التطبيق
-            utterance.onstart = function() {
-                setStatus('🔊 جاري القراءة...', 'info');
-                readBtn.textContent = '⏹️ إيقاف';
-                readBtn.style.background = '#e74c3c';
-            };
-
-            utterance.onend = function() {
-                setStatus('✅ انتهت القراءة بنجاح', 'success');
-                readBtn.textContent = '📖 اقرأ النص';
-                readBtn.style.background = '#3498db';
-            };
-
-            utterance.onerror = function(event) {
-                let errorMsg = '❌ حدث خطأ: ';
-                switch(event.error) {
-                    case 'not-allowed':
-                        errorMsg += 'الرجاء السماح للتطبيق باستخدام الصوت';
-                        break;
-                    case 'synthesis-unavailable':
-                        errorMsg += 'خدمة الترجمة الصوتية غير متوفرة حالياً';
-                        break;
-                    case 'synthesis-failed':
-                        errorMsg += 'فشل تحويل النص إلى كلام';
-                        break;
-                    default:
-                        errorMsg += event.error;
+            // التحقق من توفر الأصوات العربية (قد تكون غير مثبتة)
+            function checkArabicVoice() {
+                const voices = window.speechSynthesis.getVoices();
+                const arabicVoice = voices.find(v => v.lang.startsWith('ar'));
+                if (!arabicVoice) {
+                    setStatus('⚠️ قد لا تتوفر أصوات عربية في هذا الجهاز. سيتم استخدام الصوت الافتراضي.', 'warning');
                 }
-                setStatus(errorMsg, 'error');
-                readBtn.textContent = '📖 اقرأ النص';
-                readBtn.style.background = '#3498db';
-            };
-
-            // محاولة القراءة
-            try {
-                window.speechSynthesis.speak(utterance);
-            } catch (e) {
-                setStatus('❌ خطأ غير متوقع: ' + e.message, 'error');
-                readBtn.textContent = '📖 اقرأ النص';
-                readBtn.style.background = '#3498db';
             }
-        });
 
-        // زر الإيقاف المؤقت عند النقر مرة أخرى
-        readBtn.addEventListener('click', function() {
-            if (window.speechSynthesis.speaking) {
-                window.speechSynthesis.cancel();
+            // محاولة تحميل الأصوات (قد تحتاج لبعض الوقت في كروم)
+            if (window.speechSynthesis.getVoices().length === 0) {
+                window.speechSynthesis.onvoiceschanged = function() {
+                    checkArabicVoice();
+                };
+            } else {
+                checkArabicVoice();
+            }
+
+            setStatus('✅ التطبيق جاهز، اختر نصاً واضغط اقرأ', 'success');
+
+            // دالة قراءة النص
+            function speakText() {
+                const text = textInput.value.trim();
+                
+                // التحقق من وجود نص
+                if (!text) {
+                    setStatus('⚠️ الرجاء إدخال نص للقراءة', 'error');
+                    return;
+                }
+
+                // إلغاء أي قراءة سابقة
+                if (window.speechSynthesis.speaking) {
+                    window.speechSynthesis.cancel();
+                }
+
+                // إنشاء كائن الكلام
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'ar-SA';
+                utterance.rate = parseFloat(speedSlider.value);
+                utterance.pitch = parseFloat(pitchSlider.value);
+                utterance.volume = 1;
+
+                // محاولة تعيين صوت عربي إذا وجد
+                try {
+                    const voices = window.speechSynthesis.getVoices();
+                    const arabicVoice = voices.find(v => v.lang.startsWith('ar'));
+                    if (arabicVoice) {
+                        utterance.voice = arabicVoice;
+                    }
+                } catch (e) {
+                    // تجاهل خطأ تعيين الصوت
+                }
+
+                currentUtterance = utterance;
+
+                // أحداث التطبيق
+                utterance.onstart = function() {
+                    setStatus('🔊 جاري القراءة...', 'info');
+                    setStopButton();
+                };
+
+                utterance.onend = function() {
+                    setStatus('✅ انتهت القراءة بنجاح', 'success');
+                    resetButton();
+                };
+
+                utterance.onerror = function(event) {
+                    // تجاهل خطأ interrupted إذا تم الإيقاف عمداً
+                    if (event.error === 'interrupted') {
+                        setStatus('⏹️ تم إيقاف القراءة', 'info');
+                        resetButton();
+                        return;
+                    }
+
+                    let errorMsg = '❌ حدث خطأ: ';
+                    switch(event.error) {
+                        case 'not-allowed':
+                            errorMsg += 'الرجاء السماح للتطبيق باستخدام الصوت';
+                            break;
+                        case 'synthesis-unavailable':
+                            errorMsg += 'خدمة الترجمة الصوتية غير متوفرة حالياً';
+                            break;
+                        case 'synthesis-failed':
+                            errorMsg += 'فشل تحويل النص إلى كلام';
+                            break;
+                        default:
+                            errorMsg += event.error;
+                    }
+                    setStatus(errorMsg, 'error');
+                    resetButton();
+                };
+
+                // محاولة القراءة
+                try {
+                    window.speechSynthesis.speak(utterance);
+                } catch (e) {
+                    setStatus('❌ خطأ غير متوقع: ' + e.message, 'error');
+                    resetButton();
+                }
+            }
+
+            // دالة إيقاف القراءة
+            function stopSpeaking() {
+                if (window.speechSynthesis.speaking) {
+                    window.speechSynthesis.cancel();
+                }
                 setStatus('⏹️ تم الإيقاف', 'info');
-                readBtn.textContent = '📖 اقرأ النص';
-                readBtn.style.background = '#3498db';
+                resetButton();
             }
-        });
 
-        // إعادة تعيين الحالة عند فقدان التركيز
-        window.addEventListener('beforeunload', function() {
-            if (window.speechSynthesis.speaking) {
-                window.speechSynthesis.cancel();
-            }
-        });
+            // معالج واحد فقط للزر
+            readBtn.addEventListener('click', function() {
+                // منع النقر المتعدد السريع
+                if (readBtn.disabled) return;
+
+                // إذا كان الزر في حالة إيقاف، أوقف القراءة
+                if (isSpeaking) {
+                    stopSpeaking();
+                    return;
+                }
+
+                // وإلا اقرأ النص
+                speakText();
+            });
+
+            // إعادة تعيين الحالة عند فقدان التركيز
+            window.addEventListener('beforeunload', function() {
+                if (window.speechSynthesis.speaking) {
+                    window.speechSynthesis.cancel();
+                }
+            });
+
+            // معالجة حالة فقدان الصوت في الخلفية (مهم للأندرويد)
+            document.addEventListener('visibilitychange', function() {
+                if (document.hidden && window.speechSynthesis.speaking) {
+                    // في بعض الأحيان يتوقف الصوت تلقائياً عند الخلفية
+                    // نتحقق بعد العودة إذا كان لا يزال يتحدث
+                }
+            });
+
+            // التحقق الدوري من حالة الكلام (لتصحيح حالة الزر)
+            setInterval(function() {
+                if (isSpeaking && !window.speechSynthesis.speaking && currentUtterance) {
+                    // إذا كان الكلام قد توقف بدون حدث onend (مشكلة في بعض المتصفحات)
+                    resetButton();
+                    setStatus('⏹️ توقفت القراءة', 'info');
+                }
+            }, 5000);
+
+        })();
     </script>
 </body>
 </html>
