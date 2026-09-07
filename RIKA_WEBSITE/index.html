@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>التعرف على الصوت - مبسط</title>
+    <title>التعرف على الصوت - سلسلة ذكية</title>
     <style>
         * {
             margin: 0;
@@ -310,7 +310,7 @@
 
     <div class="app-container">
 
-        <div class="app-title">🎙️ - - <span>تعرف</span> الصوت</div>
+        <div class="app-title">🎙️ <span>تعرف</span> الصوت</div>
 
         <!-- المفاتيح العلوية -->
         <div class="controls">
@@ -398,10 +398,17 @@
         let isMainOn = true;
         let isContinuous = false;
         let hasStarted = false;
-        let isListening = false;
+
+        // ⭐ متغيرات السلسلة الجديدة
+        let isInChain = false; // هل نحن داخل سلسلة الاستماع؟
+        let isListening = false; // هل الخدمة شغالة حالياً؟
         let recognizer = null;
         let currentVolume = 0;
         let VOLUME_THRESHOLD = 2;
+
+        // ⭐ متغيرات النص
+        let fullText = '';
+        let hasReceivedText = false; // هل استلمنا نصاً في المحاولة الحالية؟
 
         // متغيرات الصوت
         let audioContext = null;
@@ -409,9 +416,8 @@
         let mediaStream = null;
         let monitorTimer = null;
 
-        // متغيرات النص
-        let fullText = '';
-        let lastInterim = '';
+        // مؤقتات
+        let restartTimer = null;
 
         // ================================================================
         // 2. دوال تحديث الواجهة
@@ -450,7 +456,6 @@
 
         function clearText() {
             fullText = '';
-            lastInterim = '';
             updateTextDisplay();
         }
 
@@ -472,39 +477,71 @@
         }
 
         // ================================================================
-        // 4. تشغيل وإيقاف التعرف على الكلام
+        // 4. دوال السلسلة (المنطق الجديد)
         // ================================================================
 
+        // دخول السلسلة: يبدأها الحساس عندما يسمع صوتاً
+        function enterChain() {
+            if (isInChain) return;
+            if (!isMainOn || !hasStarted) return;
+            if (isContinuous) return; // الوضع المستمر يتجاوز السلسلة
+
+            isInChain = true;
+            hasReceivedText = false;
+            updateStatus('🟢 بدء سلسلة الاستماع...');
+            updateVolumeStatus('🔇 الحساس معطل - داخل السلسلة');
+
+            // نبدأ أول محاولة استماع
+            startListeningAttempt();
+        }
+
+        // محاولة استماع واحدة (تشغيل الخدمة وانتظار الرد)
+        function startListeningAttempt() {
+            if (!isInChain) return;
+            if (!isMainOn || !hasStarted) {
+                exitChain('❌ الميزة معطلة');
+                return;
+            }
+
+            clearText();
+            hasReceivedText = false;
+            updateStatus('🔴 جاري الاستماع... (محاولة جديدة)');
+
+            // تشغيل الخدمة
+            startRecognition();
+        }
+
+        // تشغيل خدمة التعرف (مرة واحدة، تتوقف عند الصمت)
         function startRecognition() {
             if (isListening) return;
-            if (!isMainOn || !hasStarted) return;
 
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             if (!SpeechRecognition) {
                 updateStatus('❌ المتصفح لا يدعم التعرف', true);
+                exitChain('❌ خطأ في المتصفح');
                 return;
             }
 
             try {
                 recognizer = new SpeechRecognition();
                 recognizer.lang = 'ar-SA';
-                recognizer.continuous = false; // يتوقف تلقائياً عند الصمت
+                recognizer.continuous = false; // تتوقف تلقائياً عند الصمت
                 recognizer.interimResults = true;
                 recognizer.maxAlternatives = 1;
 
                 recognizer.onstart = function() {
                     isListening = true;
                     setDotRed('listening');
-                    updateStatus('🔴 جاري الاستماع...');
                     textBox.className = 'text-box listening';
-                    clearText();
                 };
 
                 recognizer.onend = function() {
                     isListening = false;
                     setDotRed('idle');
                     textBox.className = 'text-box';
-                    updateStatus('⏸️ توقف');
+
+                    // ⭐ بعد توقف الخدمة، نتحقق: هل استلمنا نصاً؟
+                    handleAttemptResult();
                 };
 
                 recognizer.onresult = function(event) {
@@ -520,50 +557,107 @@
                         }
                     }
 
-                    // نعرض النص المؤقت فوراً
+                    // عرض النص المؤقت فوراً
                     if (interim) {
                         fullText = interim;
                         updateTextDisplay();
+                        hasReceivedText = true; // سجلنا أن هناك كلام
                     }
 
-                    // عند اكتمال الجملة نضيفها ونمسح المؤقت
+                    // عند اكتمال الجملة
                     if (final) {
                         fullText = final;
                         updateTextDisplay();
-                        // نوقف التعرف بعد الجملة
-                        if (recognizer) {
-                            try { recognizer.stop(); } catch (e) {}
-                        }
+                        hasReceivedText = true;
+                        // الخدمة ستتوقف تلقائياً (continuous = false)
                     }
                 };
 
                 recognizer.onerror = function(event) {
                     if (event.error === 'not-allowed') {
                         updateStatus('❌ تم رفض الميكروفون', true);
+                        exitChain('❌ رفض الميكروفون');
                         return;
                     }
+                    // أي خطأ آخر: نعتبره محاولة فاشلة
                     updateStatus('⚠️ خطأ: ' + event.error, true);
                     isListening = false;
                     setDotRed('idle');
+                    handleAttemptResult();
                 };
 
                 recognizer.start();
             } catch (e) {
                 updateStatus('❌ فشل التشغيل: ' + e.message, true);
+                exitChain('❌ فشل التشغيل');
             }
         }
 
-        function stopRecognition() {
-            if (recognizer) {
-                try { recognizer.stop(); } catch (e) {}
+        // معالجة نتيجة المحاولة
+        function handleAttemptResult() {
+            // ننتظر قليلاً للتأكد من أن النص قد تم تحديثه
+            setTimeout(() => {
+                if (!isInChain) return;
+
+                if (hasReceivedText && fullText.trim() !== '') {
+                    // ✅ استلمنا نصاً → نعيد التشغيل بعد ثانيتين
+                    updateStatus('✅ استلمنا نصاً: "' + fullText.trim() + '" - إعادة التشغيل بعد ثانيتين');
+                    setDotRed('idle');
+
+                    if (restartTimer) clearTimeout(restartTimer);
+                    restartTimer = setTimeout(() => {
+                        if (isInChain && isMainOn && hasStarted) {
+                            // نعيد تشغيل محاولة جديدة
+                            startListeningAttempt();
+                        }
+                        restartTimer = null;
+                    }, 2000);
+
+                } else {
+                    // ❌ لم نستلم نصاً → نخرج من السلسلة
+                    exitChain('⏸️ توقفت السلسلة: لم يتم استلام أي كلام من المستخدم');
+                }
+            }, 300); // تأخير بسيط للتأكد من اكتمال النص
+        }
+
+        // الخروج من السلسلة
+        function exitChain(reason) {
+            if (!isInChain) return;
+
+            // إيقاف أي مؤقتات
+            if (restartTimer) {
+                clearTimeout(restartTimer);
+                restartTimer = null;
             }
-            isListening = false;
-            setDotRed('idle');
-            textBox.className = 'text-box';
+
+            // إيقاف الخدمة إذا كانت شغالة
+            if (isListening) {
+                if (recognizer) {
+                    try { recognizer.stop(); } catch (e) {}
+                }
+                isListening = false;
+                setDotRed('idle');
+                textBox.className = 'text-box';
+            }
+
+            // الخروج من السلسلة
+            isInChain = false;
+            updateStatus(reason || '⏸️ خروج من السلسلة');
+            updateVolumeStatus('🔊 الحساس مفعل - ينتظر الصوت');
+
+            // إذا كان هناك نص، نتركه. وإلا نمسحه
+            if (!fullText.trim()) {
+                clearText();
+            }
+
+            // نعيد تشغيل المراقبة (الحساس) إذا كانت متوقفة
+            if (!monitorTimer) {
+                startMonitoring();
+            }
         }
 
         // ================================================================
-        // 5. المراقبة المستمرة (حلقة الصوت)
+        // 5. المراقبة المستمرة (الحساس)
         // ================================================================
 
         function startMonitoring() {
@@ -584,23 +678,27 @@
             currentVolume = getVolume();
             updateVolumeDisplay(currentVolume);
 
-            // المنطق: إذا كان الصوت > العتبة → نبدأ التعرف
-            if (isMainOn && hasStarted && !isContinuous) {
+            // ⭐ منطق الحساس الجديد:
+            // - يعمل فقط إذا كنا خارج السلسلة (isInChain == false)
+            // - والميزة مفعلة
+            // - والوضع المستمر غير مفعل
+            if (!isInChain && isMainOn && hasStarted && !isContinuous) {
                 if (currentVolume > VOLUME_THRESHOLD) {
-                    if (!isListening) {
-                        updateVolumeStatus('✅ بدء التعرف');
-                        startRecognition();
-                    }
+                    // الحساس اكتشف صوتاً → ندخل السلسلة
+                    updateVolumeStatus('🔊 صوت مرتفع - دخول السلسلة');
+                    enterChain();
                 } else {
                     updateVolumeStatus('');
                 }
             }
 
-            // الوضع المستمر (يتجاوز العتبة)
+            // الوضع المستمر (يتجاوز الحساس والسلسلة)
             if (isContinuous && isMainOn && hasStarted) {
-                if (!isListening) {
-                    updateVolumeStatus('🔁 وضع مستمر');
-                    startRecognition();
+                if (!isListening && !isInChain) {
+                    // ندخل في وضع الاستماع المستمر
+                    isInChain = true;
+                    updateStatus('🔁 وضع مستمر');
+                    startListeningAttempt();
                 }
             }
 
@@ -650,22 +748,36 @@
             startBtnWrap.style.display = 'none';
             updateStatus('🔴 جاري الاستماع...');
             clearText();
+
+            // إذا كان المستمر مفعلاً نبدأ فوراً
             if (isContinuous && isMainOn) {
-                startRecognition();
+                isInChain = true;
+                startListeningAttempt();
             }
         }
 
         function toggleMain() {
             isMainOn = !isMainOn;
             updateSwitches();
+
             if (!isMainOn) {
-                stopRecognition();
+                // إيقاف كل شيء
+                if (isInChain) {
+                    exitChain('⏸️ تم إيقاف الميزة يدوياً');
+                }
+                if (isListening) {
+                    if (recognizer) { try { recognizer.stop(); } catch (e) {} }
+                    isListening = false;
+                    setDotRed('idle');
+                    textBox.className = 'text-box';
+                }
                 clearText();
                 updateStatus('⏸️ الميزة معطلة');
             } else {
                 updateStatus('✅ الميزة مفعلة');
                 if (isContinuous && hasStarted) {
-                    startRecognition();
+                    isInChain = true;
+                    startListeningAttempt();
                 }
             }
         }
@@ -673,14 +785,23 @@
         function toggleContinuous() {
             isContinuous = !isContinuous;
             updateSwitches();
+
             if (isContinuous) {
+                // تفعيل المستمر: نخرج من أي سلسلة حالية ونبدأ وضعاً مستمراً
+                if (isInChain) {
+                    exitChain('⏸️ الخروج من السلسلة - تفعيل المستمر');
+                }
                 if (isMainOn && hasStarted) {
+                    isInChain = true;
                     clearText();
-                    startRecognition();
+                    startListeningAttempt();
                 }
                 updateStatus('🔁 وضع مستمر');
             } else {
-                stopRecognition();
+                // إيقاف المستمر: نوقف كل شيء ونعود للحساس
+                if (isInChain) {
+                    exitChain('⏸️ إيقاف المستمر - العودة للحساس');
+                }
                 updateStatus('⏸️ تم إيقاف المستمر');
             }
         }
@@ -698,7 +819,7 @@
         });
 
         // ================================================================
-        // 9. الدوال العامة (للاستخدام الخارجي)
+        // 9. الدوال العامة
         // ================================================================
 
         window.getState = function() {
@@ -706,14 +827,23 @@
                 isMainOn,
                 isContinuous,
                 hasStarted,
+                isInChain,
                 isListening,
                 currentVolume,
                 threshold: VOLUME_THRESHOLD,
-                fullText
+                fullText,
+                hasReceivedText
             };
         };
+
         window.resetApp = function() {
-            stopRecognition();
+            if (isInChain) exitChain('🔄 إعادة تعيين');
+            if (isListening) {
+                if (recognizer) { try { recognizer.stop(); } catch (e) {} }
+                isListening = false;
+                setDotRed('idle');
+                textBox.className = 'text-box';
+            }
             stopMonitoring();
             clearText();
             hasStarted = false;
@@ -722,6 +852,7 @@
             updateStatus('🔄 تم إعادة التعيين - اضغط بدء الاستماع');
             setDotRed('idle');
         };
+
         window.getText = function() { return fullText; };
 
         // ================================================================
@@ -736,6 +867,7 @@
             thresholdDisplay.textContent = VOLUME_THRESHOLD;
             startBtnWrap.style.display = 'block';
             updateStatus('⏸️ اضغط بدء الاستماع');
+            updateVolumeStatus('🔊 الحساس مفعل - ينتظر الصوت');
         })();
 
         // تنظيف عند الإغلاق
