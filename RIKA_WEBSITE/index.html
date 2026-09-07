@@ -127,21 +127,10 @@
         .text-box.listening {
             border-color: #da3633;
         }
-        .text-box.final-sentence {
-            border-color: #2ea043;
-            background: #0d1a0d;
-        }
         .text-box:empty::before {
             content: "⏳ في انتظار الكلام...";
             color: #484f58;
             font-size: 18px;
-        }
-        .sentence-counter {
-            font-size: 14px;
-            color: #8b949e;
-            text-align: left;
-            margin: -8px 0 14px 0;
-            font-family: monospace;
         }
         .volume-section {
             background: #0d1117;
@@ -259,13 +248,6 @@
         .dot.red.blink {
             animation: blink-red 0.9s infinite;
         }
-        .dot.green {
-            background: #2ea043;
-            box-shadow: 0 0 16px #2ea04388;
-        }
-        .dot.green.blink-once {
-            animation: blink-green-once 1s forwards;
-        }
         .dot.gray {
             background: #484f58;
         }
@@ -278,22 +260,6 @@
             50% {
                 opacity: 0.25;
                 transform: scale(0.85);
-            }
-        }
-        @keyframes blink-green-once {
-            0% {
-                opacity: 1;
-                transform: scale(1.2);
-                box-shadow: 0 0 30px #2ea043cc;
-            }
-            70% {
-                opacity: 1;
-                transform: scale(1);
-            }
-            100% {
-                opacity: 0.3;
-                transform: scale(0.9);
-                box-shadow: 0 0 0 #2ea04300;
             }
         }
         .status-area {
@@ -344,7 +310,7 @@
 
     <div class="app-container">
 
-        <div class="app-title">🎙️ <span>تعرف</span> الصوت</div>
+        <div class="app-title">🎙️ - - <span>تعرف</span> الصوت</div>
 
         <!-- المفاتيح العلوية -->
         <div class="controls">
@@ -367,9 +333,6 @@
 
         <!-- حقل النص -->
         <div class="text-box" id="textBox"></div>
-
-        <!-- عداد الجمل -->
-        <div class="sentence-counter" id="sentenceCounter">الجمل: 0</div>
 
         <!-- مؤشر الصوت -->
         <div class="volume-section">
@@ -398,10 +361,6 @@
                 <span class="dot gray" id="dotRed"></span>
                 <span>الاستماع</span>
             </div>
-            <div class="indicator-item">
-                <span class="dot gray" id="dotGreen"></span>
-                <span>جملة</span>
-            </div>
         </div>
 
         <!-- منطقة الحالة -->
@@ -420,73 +379,47 @@
         // عناصر الواجهة
         const $ = id => document.getElementById(id);
         const textBox = $('textBox');
-        const sentenceCounter = $('sentenceCounter');
         const mainStatus = $('mainStatus');
         const errorMsg = $('errorMsg');
         const volumeStatusMsg = $('volumeStatusMsg');
         const volumeLevelText = $('volumeLevelText');
         const volumeBarFill = $('volumeBarFill');
         const dotRed = $('dotRed');
-        const dotGreen = $('dotGreen');
-        const mainSwitch = $('mainSwitch');
-        const continuousSwitch = $('continuousSwitch');
-        const mainSwitchLabel = $('mainSwitchLabel');
-        const continuousSwitchLabel = $('continuousSwitchLabel');
         const startBtn = $('startBtn');
         const startBtnWrap = $('startBtnWrap');
         const thresholdSlider = $('thresholdSlider');
         const thresholdDisplay = $('thresholdDisplay');
+        const mainSwitch = $('mainSwitch');
+        const continuousSwitch = $('continuousSwitch');
+        const mainSwitchLabel = $('mainSwitchLabel');
+        const continuousSwitchLabel = $('continuousSwitchLabel');
 
-        // ================================================================
-        // 2. حالة التطبيق (حسب المنهج الجديد)
-        // ================================================================
-
-        let isMainOn = true; // الميزة الرئيسية
-        let isContinuous = false; // وضع مستمر
-        let hasStarted = false; // هل ضغط المستخدم على بدء؟
-
-        // متغيرات التحكم بالخدمة
-        let alwaysListen = false; // هل الخدمة مفعلة؟
-        let closeAfterSilence = 15; // عداد الصمت (15 ثانية)
-        let isListening = false; // هل التعرف شغال؟
-        let recognizer = null; // كائن التعرف
+        // حالة التطبيق
+        let isMainOn = true;
+        let isContinuous = false;
+        let hasStarted = false;
+        let isListening = false;
+        let recognizer = null;
+        let currentVolume = 0;
+        let VOLUME_THRESHOLD = 2;
 
         // متغيرات الصوت
         let audioContext = null;
         let analyser = null;
         let mediaStream = null;
         let monitorTimer = null;
-        let currentVolume = 0;
 
-        // متغيرات النصوص
-        let accumulatedText = '';
-        let finalSentence = '';
-        let sentenceHistory = [];
-        let sentenceCount = 0;
-        let isShowingFinal = false;
-        let lastFullInterim = '';
-
-        // المؤقتات
-        let silenceTimer = null;
-        let sentenceFinalizeTimer = null;
-        let finalDisplayTimer = null;
-        let greenBlinkTimer = null;
-
-        // العتبة
-        let VOLUME_THRESHOLD = 2;
+        // متغيرات النص
+        let fullText = '';
+        let lastInterim = '';
 
         // ================================================================
-        // 3. دوال تحديث الواجهة
+        // 2. دوال تحديث الواجهة
         // ================================================================
 
         function updateTextDisplay() {
-            if (isShowingFinal && finalSentence) {
-                textBox.textContent = finalSentence;
-                textBox.className = 'text-box final-sentence';
-                return;
-            }
+            textBox.textContent = fullText || '';
             textBox.className = 'text-box' + (isListening ? ' listening' : '');
-            textBox.textContent = isListening && accumulatedText ? accumulatedText : '';
         }
 
         function updateStatus(msg, isError = false) {
@@ -508,17 +441,6 @@
             else dotRed.classList.add('gray');
         }
 
-        function setDotGreen(state) {
-            dotGreen.className = 'dot';
-            if (state === 'blink') {
-                dotGreen.classList.add('green', 'blink-once');
-                if (greenBlinkTimer) clearTimeout(greenBlinkTimer);
-                greenBlinkTimer = setTimeout(() => { dotGreen.className = 'dot gray'; }, 1200);
-            } else {
-                dotGreen.classList.add('gray');
-            }
-        }
-
         function updateSwitches() {
             mainSwitch.classList.toggle('active', isMainOn);
             mainSwitchLabel.textContent = isMainOn ? 'مفعلة' : 'معطلة';
@@ -526,22 +448,14 @@
             continuousSwitchLabel.textContent = isContinuous ? 'مفعل' : 'إيقاف';
         }
 
-        function updateSentenceCounter() {
-            sentenceCounter.textContent = 'الجمل: ' + sentenceCount;
-        }
-
         function clearText() {
-            accumulatedText = '';
-            finalSentence = '';
-            isShowingFinal = false;
-            lastFullInterim = '';
-            if (finalDisplayTimer) { clearTimeout(finalDisplayTimer);
-                finalDisplayTimer = null; }
+            fullText = '';
+            lastInterim = '';
             updateTextDisplay();
         }
 
         // ================================================================
-        // 4. دوال الصوت وتحليل المستوى
+        // 3. دوال الصوت وتحليل المستوى
         // ================================================================
 
         function getVolume() {
@@ -552,20 +466,18 @@
                 let sum = 0;
                 for (let i = 0; i < data.length; i++) sum += data[i];
                 const avg = sum / data.length;
-                // مضاعفة ×1.5
                 let level = Math.min(10, Math.floor((avg / 8) * 1.5));
                 return Math.max(0, Math.min(10, level));
             } catch (e) { return 0; }
         }
 
         // ================================================================
-        // 5. دوال التحكم بالخدمة (حسب المنهج الجديد)
+        // 4. تشغيل وإيقاف التعرف على الكلام
         // ================================================================
 
-        // تشغيل الخدمة
-        function startService() {
-            if (!isMainOn || !hasStarted) return;
+        function startRecognition() {
             if (isListening) return;
+            if (!isMainOn || !hasStarted) return;
 
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             if (!SpeechRecognition) {
@@ -576,107 +488,63 @@
             try {
                 recognizer = new SpeechRecognition();
                 recognizer.lang = 'ar-SA';
-                recognizer.continuous = true;
+                recognizer.continuous = false; // يتوقف تلقائياً عند الصمت
                 recognizer.interimResults = true;
+                recognizer.maxAlternatives = 1;
 
                 recognizer.onstart = function() {
                     isListening = true;
                     setDotRed('listening');
                     updateStatus('🔴 جاري الاستماع...');
                     textBox.className = 'text-box listening';
-                    // بدأنا الاستماع → نضبط عداد الصمت
-                    closeAfterSilence = 15;
-                    if (silenceTimer) clearTimeout(silenceTimer);
-                    startSilenceTimer();
+                    clearText();
                 };
 
                 recognizer.onend = function() {
-                    // إذا كانت alwaysListen == true نعيد التشغيل فوراً
-                    if (alwaysListen && isMainOn && hasStarted) {
-                        setTimeout(() => {
-                            if (alwaysListen && isMainOn && hasStarted && !isListening) {
-                                try { recognizer.start(); } catch (e) {}
-                            }
-                        }, 100);
-                        return;
-                    }
                     isListening = false;
                     setDotRed('idle');
                     textBox.className = 'text-box';
-                    if (!isShowingFinal) updateStatus('⏸️ توقف');
-                    if (silenceTimer) { clearTimeout(silenceTimer);
-                        silenceTimer = null; }
+                    updateStatus('⏸️ توقف');
                 };
 
                 recognizer.onresult = function(event) {
-                    let interim = '',
-                        final = '';
+                    let interim = '';
+                    let final = '';
+
                     for (let i = event.resultIndex; i < event.results.length; i++) {
-                        const txt = event.results[i][0].transcript.trim();
-                        if (event.results[i].isFinal) final = txt;
-                        else interim = txt;
-                    }
-                    const currentText = final || interim;
-                    if (!currentText) return;
-
-                    if (isShowingFinal) {
-                        isShowingFinal = false;
-                        finalSentence = '';
-                        lastFullInterim = '';
-                    }
-
-                    // إضافة الكلمات الجديدة فقط (منع التكرار)
-                    if (lastFullInterim === '') {
-                        accumulatedText = currentText;
-                    } else {
-                        const oldWords = lastFullInterim.split(' ');
-                        const newWords = currentText.split(' ');
-                        let newOnly = [];
-                        for (let i = 0; i < newWords.length; i++) {
-                            if (i < oldWords.length && newWords[i] === oldWords[i]) continue;
-                            newOnly = newWords.slice(i);
-                            break;
-                        }
-                        if (newOnly.length === 0 && newWords.length > oldWords.length) {
-                            newOnly = newWords.slice(oldWords.length);
-                        }
-                        if (newOnly.length > 0) {
-                            accumulatedText += ' ' + newOnly.join(' ');
+                        const text = event.results[i][0].transcript.trim();
+                        if (event.results[i].isFinal) {
+                            final = text;
+                        } else {
+                            interim = text;
                         }
                     }
-                    lastFullInterim = currentText;
-                    updateTextDisplay();
 
-                    // إعادة ضبط عداد الجملة (3 ثواني)
-                    if (sentenceFinalizeTimer) clearTimeout(sentenceFinalizeTimer);
-                    sentenceFinalizeTimer = setTimeout(() => {
-                        if (isListening && accumulatedText) {
-                            finalizeSentence();
+                    // نعرض النص المؤقت فوراً
+                    if (interim) {
+                        fullText = interim;
+                        updateTextDisplay();
+                    }
+
+                    // عند اكتمال الجملة نضيفها ونمسح المؤقت
+                    if (final) {
+                        fullText = final;
+                        updateTextDisplay();
+                        // نوقف التعرف بعد الجملة
+                        if (recognizer) {
+                            try { recognizer.stop(); } catch (e) {}
                         }
-                        sentenceFinalizeTimer = null;
-                    }, 3000);
-
-                    // إعادة ضبط عداد الصمت
-                    closeAfterSilence = 15;
-                    if (silenceTimer) { clearTimeout(silenceTimer);
-                        silenceTimer = null; }
-                    startSilenceTimer();
+                    }
                 };
 
                 recognizer.onerror = function(event) {
                     if (event.error === 'not-allowed') {
                         updateStatus('❌ تم رفض الميكروفون', true);
-                        alwaysListen = false;
                         return;
                     }
-                    // إذا كان alwaysListen مفعلاً، نعيد التشغيل
-                    if (alwaysListen && isMainOn && hasStarted) {
-                        setTimeout(() => {
-                            if (alwaysListen && isMainOn && hasStarted && !isListening) {
-                                try { recognizer.start(); } catch (e) {}
-                            }
-                        }, 500);
-                    }
+                    updateStatus('⚠️ خطأ: ' + event.error, true);
+                    isListening = false;
+                    setDotRed('idle');
                 };
 
                 recognizer.start();
@@ -685,85 +553,17 @@
             }
         }
 
-        // إيقاف الخدمة
-        function stopService() {
-            alwaysListen = false;
+        function stopRecognition() {
             if (recognizer) {
                 try { recognizer.stop(); } catch (e) {}
             }
             isListening = false;
             setDotRed('idle');
             textBox.className = 'text-box';
-            if (silenceTimer) { clearTimeout(silenceTimer);
-                silenceTimer = null; }
-            if (sentenceFinalizeTimer) { clearTimeout(sentenceFinalizeTimer);
-                sentenceFinalizeTimer = null; }
-            updateStatus('⏸️ متوقف');
         }
 
         // ================================================================
-        // 6. عداد الصمت (closeAfterSilence)
-        // ================================================================
-
-        function startSilenceTimer() {
-            if (silenceTimer) clearTimeout(silenceTimer);
-            silenceTimer = setInterval(() => {
-                if (!isListening || isContinuous) {
-                    clearInterval(silenceTimer);
-                    silenceTimer = null;
-                    return;
-                }
-                // إذا كان الصوت > 1 نعيد ضبط العداد
-                if (currentVolume > 1) {
-                    closeAfterSilence = 15;
-                    return;
-                }
-                // نقص العداد
-                closeAfterSilence -= 1;
-                if (closeAfterSilence <= 0) {
-                    clearInterval(silenceTimer);
-                    silenceTimer = null;
-                    // إيقاف الخدمة بسبب الصمت
-                    alwaysListen = false;
-                    stopService();
-                    updateStatus('⏸️ توقف بسبب الصمت (15 ثانية)', false);
-                    setDotRed('idle');
-                }
-            }, 1000);
-        }
-
-        // ================================================================
-        // 7. إنهاء الجملة (3 ثواني صمت)
-        // ================================================================
-
-        function finalizeSentence() {
-            if (!accumulatedText) return;
-            finalSentence = accumulatedText.trim();
-            if (finalSentence) {
-                sentenceHistory.push(finalSentence);
-                sentenceCount++;
-                updateSentenceCounter();
-                accumulatedText = '';
-                isShowingFinal = true;
-                updateTextDisplay();
-                setDotGreen('blink');
-                updateStatus('✅ جملة: "' + finalSentence + '"');
-
-                // عرض الجملة لمدة ثانية ثم إخفاؤها
-                if (finalDisplayTimer) clearTimeout(finalDisplayTimer);
-                finalDisplayTimer = setTimeout(() => {
-                    isShowingFinal = false;
-                    finalSentence = '';
-                    lastFullInterim = '';
-                    updateTextDisplay();
-                    finalDisplayTimer = null;
-                    if (isListening) updateStatus('🔴 جاري الاستماع...');
-                }, 1000);
-            }
-        }
-
-        // ================================================================
-        // 8. المراقبة المستمرة (حلقة الصوت)
+        // 5. المراقبة المستمرة (حلقة الصوت)
         // ================================================================
 
         function startMonitoring() {
@@ -780,34 +580,27 @@
 
         function monitorLoop() {
             if (!analyser) { monitorTimer = requestAnimationFrame(monitorLoop); return; }
+
             currentVolume = getVolume();
             updateVolumeDisplay(currentVolume);
 
-            // المنطق: إذا كان الصوت > العتبة → alwaysListen = true → تشغيل الخدمة
+            // المنطق: إذا كان الصوت > العتبة → نبدأ التعرف
             if (isMainOn && hasStarted && !isContinuous) {
                 if (currentVolume > VOLUME_THRESHOLD) {
-                    if (!alwaysListen) {
-                        alwaysListen = true;
-                        closeAfterSilence = 15;
-                        clearText();
-                        startService();
-                        updateVolumeStatus('✅ بدء الاستماع');
+                    if (!isListening) {
+                        updateVolumeStatus('✅ بدء التعرف');
+                        startRecognition();
                     }
                 } else {
-                    if (alwaysListen && currentVolume <= 1) {
-                        // الصمت سيتولى العداد
-                    }
                     updateVolumeStatus('');
                 }
             }
 
-            // إذا كان الوضع المستمر مفعلاً
+            // الوضع المستمر (يتجاوز العتبة)
             if (isContinuous && isMainOn && hasStarted) {
-                if (!alwaysListen) {
-                    alwaysListen = true;
-                    clearText();
-                    startService();
+                if (!isListening) {
                     updateVolumeStatus('🔁 وضع مستمر');
+                    startRecognition();
                 }
             }
 
@@ -815,7 +608,7 @@
         }
 
         // ================================================================
-        // 9. إعداد الميكروفون
+        // 6. إعداد الميكروفون
         // ================================================================
 
         async function setupAudio() {
@@ -848,74 +641,64 @@
         }
 
         // ================================================================
-        // 10. دوال الأزرار والمفاتيح
+        // 7. دوال الأزرار والمفاتيح
         // ================================================================
 
-        // زر بدء الاستماع
         function handleStart() {
             if (hasStarted) return;
             hasStarted = true;
             startBtnWrap.style.display = 'none';
             updateStatus('🔴 جاري الاستماع...');
             clearText();
-            // إذا كان المستمر مفعلاً نبدأ فوراً
             if (isContinuous && isMainOn) {
-                alwaysListen = true;
-                startService();
+                startRecognition();
             }
         }
 
-        // مفتاح الميزة الرئيسية
         function toggleMain() {
             isMainOn = !isMainOn;
             updateSwitches();
             if (!isMainOn) {
-                alwaysListen = false;
-                stopService();
+                stopRecognition();
                 clearText();
                 updateStatus('⏸️ الميزة معطلة');
             } else {
                 updateStatus('✅ الميزة مفعلة');
                 if (isContinuous && hasStarted) {
-                    alwaysListen = true;
-                    startService();
+                    startRecognition();
                 }
             }
         }
 
-        // مفتاح التشغيل المستمر
         function toggleContinuous() {
             isContinuous = !isContinuous;
             updateSwitches();
             if (isContinuous) {
                 if (isMainOn && hasStarted) {
-                    alwaysListen = true;
                     clearText();
-                    startService();
+                    startRecognition();
                 }
                 updateStatus('🔁 وضع مستمر');
             } else {
-                if (!isMainOn) return;
-                alwaysListen = false;
-                stopService();
+                stopRecognition();
                 updateStatus('⏸️ تم إيقاف المستمر');
             }
         }
 
         // ================================================================
-        // 11. ربط الأحداث
+        // 8. ربط الأحداث
         // ================================================================
 
+        startBtn.addEventListener('click', handleStart);
         mainSwitch.addEventListener('click', toggleMain);
         continuousSwitch.addEventListener('click', toggleContinuous);
-        startBtn.addEventListener('click', handleStart);
         thresholdSlider.addEventListener('input', function() {
             VOLUME_THRESHOLD = parseFloat(this.value);
             thresholdDisplay.textContent = VOLUME_THRESHOLD;
         });
 
         // ================================================================
-        // 12. الدوال العامة (للاستخدام الخارجي)
+        // 9. الدوال العامة (للاستخدام الخارجي)
         // ================================================================
 
         window.getState = function() {
@@ -923,41 +706,32 @@
                 isMainOn,
                 isContinuous,
                 hasStarted,
-                alwaysListen,
                 isListening,
                 currentVolume,
-                closeAfterSilence,
-                sentenceCount,
-                sentenceHistory: sentenceHistory.slice(),
-                threshold: VOLUME_THRESHOLD
+                threshold: VOLUME_THRESHOLD,
+                fullText
             };
         };
         window.resetApp = function() {
-            alwaysListen = false;
-            stopService();
+            stopRecognition();
             stopMonitoring();
             clearText();
-            sentenceHistory = [];
-            sentenceCount = 0;
-            updateSentenceCounter();
-            setDotGreen('off');
             hasStarted = false;
             startBtnWrap.style.display = 'block';
             startMonitoring();
             updateStatus('🔄 تم إعادة التعيين - اضغط بدء الاستماع');
             setDotRed('idle');
         };
-        window.getSentences = function() { return sentenceHistory.slice(); };
+        window.getText = function() { return fullText; };
 
         // ================================================================
-        // 13. بدء التشغيل
+        // 10. بدء التشغيل
         // ================================================================
 
         (async function init() {
             const ok = await setupAudio();
             if (!ok) return;
             updateSwitches();
-            updateSentenceCounter();
             updateTextDisplay();
             thresholdDisplay.textContent = VOLUME_THRESHOLD;
             startBtnWrap.style.display = 'block';
@@ -972,5 +746,6 @@
             if (audioContext && audioContext.state !== 'closed') { audioContext.close(); }
         });
     </script>
+
 </body>
 </html>
